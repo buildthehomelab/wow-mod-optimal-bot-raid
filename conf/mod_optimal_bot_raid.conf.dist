@@ -23,6 +23,17 @@ OptimalBotRaid.MaxLevelAbovePlayer = 2
 #                 0 - (Disabled)
 OptimalBotRaid.SameLevelAtCaps = 1
 
+# OptimalBotRaid.SortGroups
+#    Description: After .botraid assemble, sort the raid into groups: tanks in
+#                 group 1, then melee, hunters, casters and healers, so party-only
+#                 effects (totems, Prayer of Healing, Vampiric Embrace) reach the
+#                 players who use them. Shamans go one per group, to the groups
+#                 their totems help most (melee, hunters, casters, healers).
+#                 ".botraid sort" does the same at any time (leader or assistant).
+#    Default:     1 - (Enabled)
+#                 0 - (Disabled)
+OptimalBotRaid.SortGroups = 1
+
 # ==============================================================================
 # ALGORITHM HEURISTIC WEIGHTS
 # ==============================================================================

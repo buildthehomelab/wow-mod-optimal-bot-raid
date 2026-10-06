@@ -63,6 +63,7 @@ struct BotRaidConfigData {
 
     int32 maxLevelAbovePlayer;
     bool sameLevelAtCaps;
+    bool sortGroups;
 
     struct Quota { int tanks; int healers; int melee; };
     Quota quotas[7]; // Indexes: 0=5, 1=10, 2=15, 3=20, 4=25, 5=40Vanilla, 6=40WotLK
@@ -126,6 +127,7 @@ struct BotRaidConfigData {
 
         maxLevelAbovePlayer = LoadAndValidateInt("OptimalBotRaid.MaxLevelAbovePlayer", 2, 0, 80);
         sameLevelAtCaps     = sConfigMgr->GetOption<bool>("OptimalBotRaid.SameLevelAtCaps", true);
+        sortGroups          = sConfigMgr->GetOption<bool>("OptimalBotRaid.SortGroups", true);
 
         const char* clsMap[12] = {"", "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "DK", "Shaman", "Mage", "Warlock", "", "Druid"};
         float defMult[12][3] = {
@@ -296,6 +298,7 @@ public:
             { "debug",     HandleDebug,      SEC_GAMEMASTER, Console::No },
             { "telemetry", HandleTelemetry,  SEC_GAMEMASTER, Console::No },
             { "raids",     HandleRaids,      SEC_PLAYER, Console::No },
+            { "sort",      HandleSort,       SEC_PLAYER, Console::No },
             { "version",   HandleVersion,    SEC_PLAYER, Console::No }
         };
         static ChatCommandTable commandTable = { { "botraid", botRaidTable } };
@@ -917,6 +920,189 @@ public:
         }
 
         handler->PSendSysMessage("Optimal {}-man raid dynamically scaled and assembled.", size);
+
+        if (cfg->sortGroups && group->isRaidGroup())
+            SortRaidGroups(group, handler);
+        return true;
+    }
+
+    // ==============================================================================
+    // RAID SUBGROUP SORTING
+    // ==============================================================================
+
+    // Order raid members are laid out in, group 1 first.
+    enum SortType : uint8 { SORT_TANK, SORT_MELEE, SORT_HUNTER, SORT_CASTER, SORT_HEALER, SORT_TYPES };
+
+    static char const* SortTypeName(uint8 type) {
+        switch (type) {
+            case SORT_TANK:   return "tank";
+            case SORT_MELEE:  return "melee";
+            case SORT_HUNTER: return "hunter";
+            case SORT_CASTER: return "caster";
+            default:          return "healer";
+        }
+    }
+
+    static uint8 GetSortType(Player* p) {
+        BotRole role; float comp; uint32 buffs;
+        MapBotProfile(p, GetBotSpec(p, p->getClass()), role, comp, buffs);
+        switch (role) {
+            case ROLE_TANK:   return SORT_TANK;
+            case ROLE_HEALER: return SORT_HEALER;
+            case ROLE_MELEE:  return SORT_MELEE;
+            default:          return p->getClass() == CLASS_HUNTER ? SORT_HUNTER : SORT_CASTER;
+        }
+    }
+
+    // How much a group gains from a shaman's totems, by the kind of players in it: Windfury and
+    // Strength of Earth for melee, agility for hunters, Wrath of Air for casters, Mana Spring for
+    // healers.
+    static int TotemValue(uint8 type) {
+        switch (type) {
+            case SORT_MELEE:  return 4;
+            case SORT_HUNTER: return 3;
+            case SORT_CASTER: return 2;
+            case SORT_HEALER: return 1;
+            default:          return 0;
+        }
+    }
+
+    // Sorts a raid's online members into subgroups: tanks in group 1, then melee, hunters, casters
+    // and healers, so party-only effects (totems, Prayer of Healing, Vampiric Embrace, Blood Pact)
+    // land on the players who use them. Totems only reach their own group and don't depend on spec,
+    // so shamans are placed first, one per group, in the groups that gain the most (melee, then
+    // hunters, casters, healers), matching spec to group where possible; everyone else is laid
+    // out around them. Offline members keep their slots. Returns how many members moved.
+    static uint32 SortRaidGroups(Group* group, ChatHandler* handler)
+    {
+        constexpr uint8 SUBGROUPS = MAXRAIDSIZE / MAXGROUPSIZE;
+        if (!group || !group->isRaidGroup())
+            return 0;
+
+        struct Entry { Player* player; uint8 type; bool shaman; uint8 subgroup; bool placed; };
+        std::vector<Entry> members;
+        uint8 capacity[SUBGROUPS];
+        std::fill(std::begin(capacity), std::end(capacity), uint8(MAXGROUPSIZE));
+
+        for (Group::MemberSlot const& slot : group->GetMemberSlots()) {
+            Player* p = ObjectAccessor::FindConnectedPlayer(slot.guid);
+            if (p && p->GetGroup() == group)
+                members.push_back({ p, GetSortType(p), p->getClass() == CLASS_SHAMAN, 0, false });
+            else if (slot.group < SUBGROUPS && capacity[slot.group] > 0)
+                --capacity[slot.group];
+        }
+        if (members.empty())
+            return 0;
+
+        std::stable_sort(members.begin(), members.end(),
+            [](Entry const& a, Entry const& b) { return a.type < b.type; });
+
+        // Fills subgroups in order, skipping placed members. False if they don't fit.
+        auto layOut = [&](uint8 const (&cap)[SUBGROUPS]) {
+            uint8 sub = 0, used = 0;
+            for (Entry& e : members) {
+                if (e.placed)
+                    continue;
+                while (sub < SUBGROUPS && used >= cap[sub]) { ++sub; used = 0; }
+                if (sub >= SUBGROUPS)
+                    return false;
+                e.subgroup = sub;
+                ++used;
+            }
+            return true;
+        };
+
+        // Pass 1: plain layout, to learn what kind of group each one is.
+        if (!layOut(capacity))
+            return 0;  // more online members than free slots; can't happen in a valid raid
+        uint8 groupCount = 0;
+        for (Entry const& e : members)
+            groupCount = std::max<uint8>(groupCount, e.subgroup + 1);
+
+        uint8 kind[SUBGROUPS] = {};
+        for (uint8 g = 0; g < groupCount; ++g) {
+            uint8 counts[SORT_TYPES] = {};
+            for (Entry const& e : members)
+                if (e.subgroup == g) ++counts[e.type];
+            kind[g] = uint8(std::max_element(std::begin(counts), std::end(counts)) - std::begin(counts));
+        }
+
+        // Pass 2: one shaman per group, best groups first; a shaman of the group's own kind if
+        // there is one, otherwise any.
+        std::vector<uint8> order;
+        for (uint8 g = 0; g < groupCount; ++g)
+            order.push_back(g);
+        std::stable_sort(order.begin(), order.end(),
+            [&](uint8 a, uint8 b) { return TotemValue(kind[a]) > TotemValue(kind[b]); });
+
+        size_t shamans = std::count_if(members.begin(), members.end(), [](Entry const& e) { return e.shaman; });
+        if (order.size() > shamans)
+            order.resize(shamans);
+
+        uint8 remaining[SUBGROUPS];
+        std::copy(std::begin(capacity), std::end(capacity), std::begin(remaining));
+        std::vector<uint8> unfilled;
+        auto place = [&](Entry& shaman, uint8 g) {
+            shaman.placed = true;
+            shaman.subgroup = g;
+            --remaining[g];
+        };
+        for (uint8 g : order) {
+            auto match = std::find_if(members.begin(), members.end(),
+                [&](Entry const& e) { return e.shaman && !e.placed && e.type == kind[g]; });
+            if (match != members.end())
+                place(*match, g);
+            else
+                unfilled.push_back(g);
+        }
+        for (uint8 g : unfilled) {
+            auto any = std::find_if(members.begin(), members.end(),
+                [](Entry const& e) { return e.shaman && !e.placed; });
+            if (any != members.end())
+                place(*any, g);
+        }
+
+        // Pass 3: everyone else (including shamans beyond one per group) around them.
+        if (!layOut(remaining))
+            return 0;
+
+        uint32 changed = 0;
+        for (Entry const& e : members) {
+            if (group->GetMemberGroup(e.player->GetGUID()) != e.subgroup) {
+                group->ChangeMembersGroup(e.player->GetGUID(), e.subgroup);
+                ++changed;
+            }
+        }
+
+        if (handler) {
+            handler->PSendSysMessage("Raid sorted into {} groups ({} moved):", groupCount, changed);
+            for (uint8 g = 0; g < groupCount; ++g) {
+                std::string line;
+                for (Entry const& e : members) {
+                    if (e.subgroup != g) continue;
+                    line += (line.empty() ? "" : ", ") + e.player->GetName() + " (" + SortTypeName(e.type) +
+                        (e.shaman ? " shaman" : "") + ")";
+                }
+                if (!line.empty())
+                    handler->PSendSysMessage("  Group {}: {}", g + 1, line);
+            }
+        }
+        return changed;
+    }
+
+    static bool HandleSort(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        Group* group = player->GetGroup();
+        if (!group || !group->isRaidGroup()) {
+            handler->SendSysMessage("You need to be in a raid group to sort it.");
+            return true;
+        }
+        if (!group->IsLeader(player->GetGUID()) && !group->IsAssistant(player->GetGUID())) {
+            handler->SendSysMessage("Only the raid leader or an assistant can sort the raid.");
+            return true;
+        }
+        SortRaidGroups(group, handler);
         return true;
     }
 
