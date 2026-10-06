@@ -105,39 +105,222 @@ OptimalBotRaid.Quota.40WotLK.MeleeMax = 10
 # RAID LINEUPS
 # ==============================================================================
 # Used instead of the quotas above when the leader assembles inside that raid, or
-# anywhere with ".botraid assemble <raid> [size]". Ranged slots are whatever is
-# left after tanks, healers and melee.
-#
-# ONYXIA'S LAIR (.botraid assemble onyxia <10|25|40>, or "ony")
-# Onyxia spends her air phase
-# (65% to 40% health) out of melee reach, so these favor ranged DPS.
-#
-# 10 / 25: the WotLK version. Extra tank for the Onyxian Lair Guards and whelps.
-#          Default 10: 2 tanks, 2 healers, 1 melee, 5 ranged
-#          Default 25: 3 tanks, 5 healers, 3 melee, 14 ranged
-# 40:      individual-progression's 40-man version (taunt-immune; whelp waves).
-#          Default 40: 4 tanks, 10 healers, 4 melee, 22 ranged
+# anywhere with ".botraid assemble <raid> [size]" (".botraid raids" lists them).
+# Sizes without a lineup fall back to the quotas above; a raid with one size
+# doesn't need the size. Ranged slots are whatever is left after tanks, healers
+# and melee. Defaults come from raid guides, then shifted toward ranged and an
+# extra healer where bots struggle (see the README for sources).
+
+# --- Vanilla ---
+
+# ZUL'GURUB (.botraid assemble zg)
+#    Hakkar mind-controls tanks and Thekal splits three ways; Venoxis and Arlokk punish melee.
+#    Default 20: 3 tanks, 6 healers, 3 melee, 8 ranged
+OptimalBotRaid.Quota.ZulGurub.20.Tanks = 3
+OptimalBotRaid.Quota.ZulGurub.20.Healers = 6
+OptimalBotRaid.Quota.ZulGurub.20.MeleeMax = 3
+
+# RUINS OF AHN'QIRAJ (.botraid assemble aq20)
+#    Extra tank for Kurinnaxx swaps and Rajaxx waves; Moam, Ayamiss and Ossirian favor ranged.
+#    Default 20: 3 tanks, 5 healers, 3 melee, 9 ranged
+OptimalBotRaid.Quota.RuinsOfAhnQiraj.20.Tanks = 3
+OptimalBotRaid.Quota.RuinsOfAhnQiraj.20.Healers = 5
+OptimalBotRaid.Quota.RuinsOfAhnQiraj.20.MeleeMax = 3
+
+# ONYXIA (.botraid assemble onyxia <10|25|40>)
+#    Only ranged can hit her in the air.
+#    Default 10: 2 tanks, 2 healers, 1 melee, 5 ranged
+#    Default 25: 3 tanks, 5 healers, 3 melee, 14 ranged
+#    Default 40: 4 tanks, 10 healers, 4 melee, 22 ranged
 OptimalBotRaid.Quota.Onyxia.10.Tanks = 2
 OptimalBotRaid.Quota.Onyxia.10.Healers = 2
 OptimalBotRaid.Quota.Onyxia.10.MeleeMax = 1
-
 OptimalBotRaid.Quota.Onyxia.25.Tanks = 3
 OptimalBotRaid.Quota.Onyxia.25.Healers = 5
 OptimalBotRaid.Quota.Onyxia.25.MeleeMax = 3
-
 OptimalBotRaid.Quota.Onyxia.40.Tanks = 4
 OptimalBotRaid.Quota.Onyxia.40.Healers = 10
 OptimalBotRaid.Quota.Onyxia.40.MeleeMax = 4
 
-# MOLTEN CORE (.botraid assemble mc, or "moltencore")
-# Classic guides run 3-5 tanks and 10-12 healers. Garr, Golemagg and Majordomo
-# need extra tanks for their adds, and Ragnaros's Wrath knocks melee back into
-# the lava, so this takes the top of both ranges and fewer melee than a stock
-# vanilla 40.
-#          Default 40: 5 tanks, 11 healers, 8 melee, 16 ranged
+# MOLTEN CORE (.botraid assemble mc)
+#    Extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava.
+#    Default 40: 5 tanks, 11 healers, 8 melee, 16 ranged
 OptimalBotRaid.Quota.MoltenCore.40.Tanks = 5
 OptimalBotRaid.Quota.MoltenCore.40.Healers = 11
 OptimalBotRaid.Quota.MoltenCore.40.MeleeMax = 8
+
+# BLACKWING LAIR (.botraid assemble bwl)
+#    Five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing.
+#    Default 40: 5 tanks, 13 healers, 7 melee, 15 ranged
+OptimalBotRaid.Quota.BlackwingLair.40.Tanks = 5
+OptimalBotRaid.Quota.BlackwingLair.40.Healers = 13
+OptimalBotRaid.Quota.BlackwingLair.40.MeleeMax = 7
+
+# TEMPLE OF AHN'QIRAJ (.botraid assemble aq40)
+#    Tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee.
+#    Default 40: 5 tanks, 12 healers, 7 melee, 16 ranged
+OptimalBotRaid.Quota.TempleOfAhnQiraj.40.Tanks = 5
+OptimalBotRaid.Quota.TempleOfAhnQiraj.40.Healers = 12
+OptimalBotRaid.Quota.TempleOfAhnQiraj.40.MeleeMax = 7
+
+# NAXXRAMAS (.botraid assemble naxx <10|25|40>)
+#    Extra tanks for Patchwerk, Thaddius and the Horsemen; Heigan and Sapphiron favor ranged.
+#    Default 10: 2 tanks, 2 healers, 2 melee, 4 ranged
+#    Default 25: 3 tanks, 5 healers, 5 melee, 12 ranged
+#    Default 40: 6 tanks, 12 healers, 6 melee, 16 ranged
+OptimalBotRaid.Quota.Naxxramas.10.Tanks = 2
+OptimalBotRaid.Quota.Naxxramas.10.Healers = 2
+OptimalBotRaid.Quota.Naxxramas.10.MeleeMax = 2
+OptimalBotRaid.Quota.Naxxramas.25.Tanks = 3
+OptimalBotRaid.Quota.Naxxramas.25.Healers = 5
+OptimalBotRaid.Quota.Naxxramas.25.MeleeMax = 5
+OptimalBotRaid.Quota.Naxxramas.40.Tanks = 6
+OptimalBotRaid.Quota.Naxxramas.40.Healers = 12
+OptimalBotRaid.Quota.Naxxramas.40.MeleeMax = 6
+
+# --- The Burning Crusade ---
+
+# KARAZHAN (.botraid assemble kara)
+#    Third healer for Prince and Nightbane; Aran and Prince punish melee.
+#    Default 10: 2 tanks, 3 healers, 2 melee, 3 ranged
+OptimalBotRaid.Quota.Karazhan.10.Tanks = 2
+OptimalBotRaid.Quota.Karazhan.10.Healers = 3
+OptimalBotRaid.Quota.Karazhan.10.MeleeMax = 2
+
+# ZUL'AMAN (.botraid assemble za)
+#    Nalorakk tank swap and Halazzi split; Akil'zon and Zul'jin's Whirlwind punish melee.
+#    Default 10: 2 tanks, 3 healers, 2 melee, 3 ranged
+OptimalBotRaid.Quota.ZulAman.10.Tanks = 2
+OptimalBotRaid.Quota.ZulAman.10.Healers = 3
+OptimalBotRaid.Quota.ZulAman.10.MeleeMax = 2
+
+# GRUUL'S LAIR (.botraid assemble gruul)
+#    Three tanks for Maulgar's council; Whirlwind and Shatter punish melee.
+#    Default 25: 3 tanks, 7 healers, 4 melee, 11 ranged
+OptimalBotRaid.Quota.GruulsLair.25.Tanks = 3
+OptimalBotRaid.Quota.GruulsLair.25.Healers = 7
+OptimalBotRaid.Quota.GruulsLair.25.MeleeMax = 4
+
+# MAGTHERIDON'S LAIR (.botraid assemble mag)
+#    Three tanks to split the five Channelers, each with its own healer.
+#    Default 25: 3 tanks, 7 healers, 5 melee, 10 ranged
+OptimalBotRaid.Quota.MagtheridonsLair.25.Tanks = 3
+OptimalBotRaid.Quota.MagtheridonsLair.25.Healers = 7
+OptimalBotRaid.Quota.MagtheridonsLair.25.MeleeMax = 5
+
+# SERPENTSHRINE CAVERN (.botraid assemble ssc)
+#    Four tanks for Karathress and his guards; Lurker and Leotheras punish melee.
+#    Default 25: 4 tanks, 7 healers, 4 melee, 10 ranged
+OptimalBotRaid.Quota.SerpentshrineCavern.25.Tanks = 4
+OptimalBotRaid.Quota.SerpentshrineCavern.25.Healers = 7
+OptimalBotRaid.Quota.SerpentshrineCavern.25.MeleeMax = 4
+
+# TEMPEST KEEP (.botraid assemble tk)
+#    Tanks for Al'ar and Kael'thas's advisors; Flamestrike punishes stacked melee.
+#    Default 25: 3 tanks, 7 healers, 5 melee, 10 ranged
+OptimalBotRaid.Quota.TempestKeep.25.Tanks = 3
+OptimalBotRaid.Quota.TempestKeep.25.Healers = 7
+OptimalBotRaid.Quota.TempestKeep.25.MeleeMax = 5
+
+# HYJAL SUMMIT (.botraid assemble hyjal)
+#    Third tank for trash waves, Infernals and Doomguards; Archimonde punishes melee.
+#    Default 25: 3 tanks, 7 healers, 5 melee, 10 ranged
+OptimalBotRaid.Quota.HyjalSummit.25.Tanks = 3
+OptimalBotRaid.Quota.HyjalSummit.25.Healers = 7
+OptimalBotRaid.Quota.HyjalSummit.25.MeleeMax = 5
+
+# BLACK TEMPLE (.botraid assemble bt)
+#    Three tanks for Bloodboil, Shahraz, the Council and Illidan's Flames; Illidan punishes melee.
+#    Default 25: 3 tanks, 7 healers, 4 melee, 11 ranged
+OptimalBotRaid.Quota.BlackTemple.25.Tanks = 3
+OptimalBotRaid.Quota.BlackTemple.25.Healers = 7
+OptimalBotRaid.Quota.BlackTemple.25.MeleeMax = 4
+
+# SUNWELL PLATEAU (.botraid assemble swp)
+#    Hardest healing tier; M'uru needs three tanks and Darkness pushes melee out.
+#    Default 25: 3 tanks, 8 healers, 4 melee, 10 ranged
+OptimalBotRaid.Quota.SunwellPlateau.25.Tanks = 3
+OptimalBotRaid.Quota.SunwellPlateau.25.Healers = 8
+OptimalBotRaid.Quota.SunwellPlateau.25.MeleeMax = 4
+
+# --- Wrath of the Lich King (Naxxramas and Onyxia are above) ---
+
+# OBSIDIAN SANCTUM (.botraid assemble os <10|25>)
+#    Fire walls and lava waves sweep the melee; the drakes need an off-tank.
+#    Default 10: 2 tanks, 2 healers, 1 melee, 5 ranged
+#    Default 25: 2 tanks, 5 healers, 5 melee, 13 ranged
+OptimalBotRaid.Quota.ObsidianSanctum.10.Tanks = 2
+OptimalBotRaid.Quota.ObsidianSanctum.10.Healers = 2
+OptimalBotRaid.Quota.ObsidianSanctum.10.MeleeMax = 1
+OptimalBotRaid.Quota.ObsidianSanctum.25.Tanks = 2
+OptimalBotRaid.Quota.ObsidianSanctum.25.Healers = 5
+OptimalBotRaid.Quota.ObsidianSanctum.25.MeleeMax = 5
+
+# EYE OF ETERNITY (.botraid assemble eoe <10|25>)
+#    Ranged kill the Scions in phase 2 while tanks hold the Nexus Lords.
+#    Default 10: 2 tanks, 2 healers, 2 melee, 4 ranged
+#    Default 25: 2 tanks, 5 healers, 5 melee, 13 ranged
+OptimalBotRaid.Quota.EyeOfEternity.10.Tanks = 2
+OptimalBotRaid.Quota.EyeOfEternity.10.Healers = 2
+OptimalBotRaid.Quota.EyeOfEternity.10.MeleeMax = 2
+OptimalBotRaid.Quota.EyeOfEternity.25.Tanks = 2
+OptimalBotRaid.Quota.EyeOfEternity.25.Healers = 5
+OptimalBotRaid.Quota.EyeOfEternity.25.MeleeMax = 5
+
+# VAULT OF ARCHAVON (.botraid assemble voa <10|25>)
+#    Emalon's Lightning Nova punishes melee; Koralon and Toravon need tank swaps.
+#    Default 10: 2 tanks, 2 healers, 2 melee, 4 ranged
+#    Default 25: 2 tanks, 5 healers, 5 melee, 13 ranged
+OptimalBotRaid.Quota.VaultOfArchavon.10.Tanks = 2
+OptimalBotRaid.Quota.VaultOfArchavon.10.Healers = 2
+OptimalBotRaid.Quota.VaultOfArchavon.10.MeleeMax = 2
+OptimalBotRaid.Quota.VaultOfArchavon.25.Tanks = 2
+OptimalBotRaid.Quota.VaultOfArchavon.25.Healers = 5
+OptimalBotRaid.Quota.VaultOfArchavon.25.MeleeMax = 5
+
+# ULDUAR (.botraid assemble uld <10|25>)
+#    Iron Council needs extra tanks; Mimiron, XT and Vezax punish melee; heavy raid damage.
+#    Default 10: 2 tanks, 3 healers, 1 melee, 4 ranged
+#    Default 25: 3 tanks, 6 healers, 4 melee, 12 ranged
+OptimalBotRaid.Quota.Ulduar.10.Tanks = 2
+OptimalBotRaid.Quota.Ulduar.10.Healers = 3
+OptimalBotRaid.Quota.Ulduar.10.MeleeMax = 1
+OptimalBotRaid.Quota.Ulduar.25.Tanks = 3
+OptimalBotRaid.Quota.Ulduar.25.Healers = 6
+OptimalBotRaid.Quota.Ulduar.25.MeleeMax = 4
+
+# TRIAL OF THE CRUSADER (.botraid assemble toc <10|25>)
+#    Anub'arak's Burrowers need off-tanks; Champions and Leeching Swarm burst the raid.
+#    Default 10: 2 tanks, 2 healers, 2 melee, 4 ranged
+#    Default 25: 3 tanks, 6 healers, 4 melee, 12 ranged
+OptimalBotRaid.Quota.TrialOfTheCrusader.10.Tanks = 2
+OptimalBotRaid.Quota.TrialOfTheCrusader.10.Healers = 2
+OptimalBotRaid.Quota.TrialOfTheCrusader.10.MeleeMax = 2
+OptimalBotRaid.Quota.TrialOfTheCrusader.25.Tanks = 3
+OptimalBotRaid.Quota.TrialOfTheCrusader.25.Healers = 6
+OptimalBotRaid.Quota.TrialOfTheCrusader.25.MeleeMax = 4
+
+# ICECROWN CITADEL (.botraid assemble icc <10|25>)
+#    Sindragosa, Marrowgar and the Lich King punish melee; Valithria and Putricide need healing.
+#    Default 10: 2 tanks, 3 healers, 1 melee, 4 ranged
+#    Default 25: 2 tanks, 6 healers, 5 melee, 12 ranged
+OptimalBotRaid.Quota.IcecrownCitadel.10.Tanks = 2
+OptimalBotRaid.Quota.IcecrownCitadel.10.Healers = 3
+OptimalBotRaid.Quota.IcecrownCitadel.10.MeleeMax = 1
+OptimalBotRaid.Quota.IcecrownCitadel.25.Tanks = 2
+OptimalBotRaid.Quota.IcecrownCitadel.25.Healers = 6
+OptimalBotRaid.Quota.IcecrownCitadel.25.MeleeMax = 5
+
+# RUBY SANCTUM (.botraid assemble rs <10|25>)
+#    Halion splits the raid: melee in the Twilight realm, ranged in the Physical realm.
+#    Default 10: 2 tanks, 3 healers, 1 melee, 4 ranged
+#    Default 25: 2 tanks, 6 healers, 6 melee, 11 ranged
+OptimalBotRaid.Quota.RubySanctum.10.Tanks = 2
+OptimalBotRaid.Quota.RubySanctum.10.Healers = 3
+OptimalBotRaid.Quota.RubySanctum.10.MeleeMax = 1
+OptimalBotRaid.Quota.RubySanctum.25.Tanks = 2
+OptimalBotRaid.Quota.RubySanctum.25.Healers = 6
+OptimalBotRaid.Quota.RubySanctum.25.MeleeMax = 6
 
 # ==============================================================================
 # AI COMPETENCY MULTIPLIERS BY CLASS & SPEC
