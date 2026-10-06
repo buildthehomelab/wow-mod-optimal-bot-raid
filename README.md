@@ -28,6 +28,7 @@ Category: Bots
 - At level 60, 70 and 80 you only draft bots of your own level.
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
 - **Onyxia lineup:** assembling inside Onyxia's Lair, or typing **.botraid assemble onyxia 40** (or 10, 25) anywhere, drafts a ranged-heavy raid, since only ranged can hit Onyxia while she's flying. Works for the 10/25-man and the 40-man version.
+- **Molten Core lineup:** assembling inside Molten Core, or typing **.botraid assemble mc** anywhere, drafts 5 tanks for Garr, Golemagg and Majordomo's adds, 11 healers, and fewer melee, since Ragnaros knocks melee into the lava.
 
 ---
 
@@ -80,7 +81,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 ### 1. Assemble a Group or Raid
 **Syntax:** `.botraid assemble [<min-max>] <size>`  
 **Supported Sizes:** 5, 10, 15, 20, 25, 40  
-**Examples:** `.botraid assemble 10` | `.botraid assemble 60-67 40` | `.botraid assemble onyxia 40`  
+**Examples:** `.botraid assemble 10` | `.botraid assemble 60-67 40` | `.botraid assemble onyxia 40` | `.botraid assemble mc`  
 **What it does:**
 * Evaluates your current group (and any human friends currently with you).
 * Calculates missing roles based on strict Ranged-to-Melee bias quotas to prevent melee cleave deaths.
@@ -141,18 +142,28 @@ The algorithm strictly enforces the following quotas to ensure boss survivabilit
 | **40-man (Vanilla <= Lvl 60)** | 4 | 10 | 10 | 16 |
 | **40-man (WotLK > Lvl 60)** | 3 | 8 | 10 | 19 |
 
-### Onyxia's Lair Lineups
-Used instead of the table above when the leader assembles inside Onyxia's Lair (map 249), or
-anywhere with `.botraid assemble onyxia <10|25|40>` (`ony` works too). Onyxia's air phase
-(65% to 40% health) is out of melee reach, so these draft as much ranged as the raid can carry.
-The extra tank picks up the Onyxian Lair Guards (10/25) and whelp waves (40). Other sizes fall
-back to the standard lineup. Configurable under `OptimalBotRaid.Quota.Onyxia.*`.
+### Raid Lineups
+Used instead of the table above when the leader assembles inside the raid, or anywhere with
+`.botraid assemble <raid> [size]`. Sizes without a lineup fall back to the standard one. A raid
+with a single size (Molten Core) doesn't need the size. Configurable under
+`OptimalBotRaid.Quota.<Raid>.<size>.*`.
 
-| Onyxia | Tanks | Healers | Melee (Max) | Ranged |
-| :--- | :--- | :--- | :--- | :--- |
-| **10-man** | 2 | 2 | 1 | 5 |
-| **25-man** | 3 | 5 | 3 | 14 |
-| **40-man (individual-progression)** | 4 | 10 | 4 | 22 |
+| Raid | Command | Tanks | Healers | Melee (Max) | Ranged |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Onyxia 10-man** | `onyxia 10` / `ony 10` | 2 | 2 | 1 | 5 |
+| **Onyxia 25-man** | `onyxia 25` | 3 | 5 | 3 | 14 |
+| **Onyxia 40-man (individual-progression)** | `onyxia 40` | 4 | 10 | 4 | 22 |
+| **Molten Core** | `mc` / `moltencore` | 5 | 11 | 8 | 16 |
+
+* **Onyxia:** her air phase (65% to 40% health) is out of melee reach, so these draft as much
+  ranged as the raid can carry. The extra tank picks up the Onyxian Lair Guards (10/25) and whelp
+  waves (40).
+* **Molten Core:** classic guides run 3-5 tanks and 10-12 healers
+  ([Warcraft Tavern](https://www.warcrafttavern.com/wow-classic/guides/mc/),
+  [Boosting Ground](https://boosting-ground.com/wow-classic/guides/raid-guides/molten-core-guide)).
+  Garr, Golemagg (two Core Ragers) and Majordomo (eight adds) need extra tanks, and Ragnaros's Wrath
+  knocks melee back into the lava, so this takes the top of both ranges and fewer melee than the
+  stock vanilla 40.
 
 ---
 

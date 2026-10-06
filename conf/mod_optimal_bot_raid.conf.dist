@@ -102,12 +102,15 @@ OptimalBotRaid.Quota.40WotLK.Healers = 8
 OptimalBotRaid.Quota.40WotLK.MeleeMax = 10
 
 # ==============================================================================
-# ONYXIA'S LAIR LINEUPS
+# RAID LINEUPS
 # ==============================================================================
-# Used instead of the quotas above when the leader assembles inside Onyxia's Lair,
-# or anywhere with ".botraid assemble onyxia <size>". Onyxia spends her air phase
-# (65% to 40% health) out of melee reach, so these favor ranged DPS. Ranged slots
-# are whatever is left after tanks, healers and melee.
+# Used instead of the quotas above when the leader assembles inside that raid, or
+# anywhere with ".botraid assemble <raid> [size]". Ranged slots are whatever is
+# left after tanks, healers and melee.
+#
+# ONYXIA'S LAIR (.botraid assemble onyxia <10|25|40>, or "ony")
+# Onyxia spends her air phase
+# (65% to 40% health) out of melee reach, so these favor ranged DPS.
 #
 # 10 / 25: the WotLK version. Extra tank for the Onyxian Lair Guards and whelps.
 #          Default 10: 2 tanks, 2 healers, 1 melee, 5 ranged
@@ -125,6 +128,16 @@ OptimalBotRaid.Quota.Onyxia.25.MeleeMax = 3
 OptimalBotRaid.Quota.Onyxia.40.Tanks = 4
 OptimalBotRaid.Quota.Onyxia.40.Healers = 10
 OptimalBotRaid.Quota.Onyxia.40.MeleeMax = 4
+
+# MOLTEN CORE (.botraid assemble mc, or "moltencore")
+# Classic guides run 3-5 tanks and 10-12 healers. Garr, Golemagg and Majordomo
+# need extra tanks for their adds, and Ragnaros's Wrath knocks melee back into
+# the lava, so this takes the top of both ranges and fewer melee than a stock
+# vanilla 40.
+#          Default 40: 5 tanks, 11 healers, 8 melee, 16 ranged
+OptimalBotRaid.Quota.MoltenCore.40.Tanks = 5
+OptimalBotRaid.Quota.MoltenCore.40.Healers = 11
+OptimalBotRaid.Quota.MoltenCore.40.MeleeMax = 8
 
 # ==============================================================================
 # AI COMPETENCY MULTIPLIERS BY CLASS & SPEC
