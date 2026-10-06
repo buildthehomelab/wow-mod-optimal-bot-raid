@@ -23,6 +23,7 @@
 #include "PlayerbotFactory.h"
 #include "Config.h"
 #include "Map.h"
+#include "LFGMgr.h"
 #include <vector>
 #include <string>
 #include <cmath>
@@ -34,12 +35,17 @@
 #include <cctype>
 #include <ctime>
 #include <shared_mutex>
+#include <unordered_map>
+#include <unordered_set>
 #include "Log.h"
 
 using namespace Acore::ChatCommands;
 
 // Global Telemetry State
 static bool s_telemetryEnabled = false;
+
+// Bots drafted by .botraid assemble, per leader. Dismiss only releases these.
+static std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> s_draftedBots;
 
 // ==============================================================================
 // CONFIGURATION CACHE & EXPLICIT BOUNDARY VALIDATION
@@ -53,6 +59,9 @@ struct BotRaidConfigData {
     float buffReplenishment;
 
     float aiMult[12][3]; // Index by [Class ID][Tree]
+
+    int32 maxLevelAbovePlayer;
+    bool sameLevelAtCaps;
 
     struct Quota { int tanks; int healers; int melee; };
     Quota quotas[7]; // Indexes: 0=5, 1=10, 2=15, 3=20, 4=25, 5=40Vanilla, 6=40WotLK
@@ -88,6 +97,9 @@ struct BotRaidConfigData {
         buffBase          = LoadAndValidateFloat("OptimalBotRaid.Algo.Bonus.UniqueBuff", 0.2f, 0.0f, 10.0f);
         buffBloodlust     = LoadAndValidateFloat("OptimalBotRaid.Algo.Bonus.Bloodlust", 0.4f, 0.0f, 10.0f);
         buffReplenishment = LoadAndValidateFloat("OptimalBotRaid.Algo.Bonus.Replenishment", 0.2f, 0.0f, 10.0f);
+
+        maxLevelAbovePlayer = LoadAndValidateInt("OptimalBotRaid.MaxLevelAbovePlayer", 2, 0, 80);
+        sameLevelAtCaps     = sConfigMgr->GetOption<bool>("OptimalBotRaid.SameLevelAtCaps", true);
 
         const char* clsMap[12] = {"", "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "DK", "Shaman", "Mage", "Warlock", "", "Druid"};
         float defMult[12][3] = {
@@ -172,8 +184,8 @@ public:
         static ChatCommandTable botRaidTable = {
             { "assemble",  HandleAssemble,   SEC_PLAYER, Console::No },
             { "dismiss",   HandleDismiss,    SEC_PLAYER, Console::No },
-            { "debug",     HandleDebug,      SEC_PLAYER, Console::No },
-            { "telemetry", HandleTelemetry,  SEC_PLAYER, Console::No },
+            { "debug",     HandleDebug,      SEC_GAMEMASTER, Console::No },
+            { "telemetry", HandleTelemetry,  SEC_GAMEMASTER, Console::No },
             { "version",   HandleVersion,    SEC_PLAYER, Console::No }
         };
         static ChatCommandTable commandTable = { { "botraid", botRaidTable } };
@@ -396,13 +408,36 @@ public:
             return true;
         }
 
+        BotRaidConfigData* cfg = BotRaidConfigData::instance();
+
         uint32 pLevel = player->GetLevel();
-        if (!hasCustomRange) {
-            reqMax = (pLevel <= 60) ? 60 : ((pLevel <= 70) ? 70 : 80);
+        // Players may not draft bots far above their own level; GMs are exempt.
+        bool isGM = handler->GetSession()->GetSecurity() >= SEC_GAMEMASTER;
+        uint32 bracketMax = (pLevel <= 60) ? 60 : ((pLevel <= 70) ? 70 : 80);
+        // Never past the end of the player's expansion bracket either (a 59 can't pull 61s).
+        uint32 levelCap = isGM ? STRONG_MAX_LEVEL : std::min<uint32>(pLevel + cfg->maxLevelAbovePlayer, bracketMax);
+        // At 60, 70 and 80 players only draft bots of exactly their level.
+        bool atLevelCap = !isGM && cfg->sameLevelAtCaps && (pLevel == 60 || pLevel == 70 || pLevel == 80);
+
+        if (atLevelCap) {
+            if (hasCustomRange && (reqMin != pLevel || reqMax != pLevel))
+                handler->PSendSysMessage("At level {} you can only draft level {} bots.", pLevel, pLevel);
+            reqMin = reqMax = pLevel;
+        } else if (!hasCustomRange) {
+            reqMax = std::min<uint32>(levelCap, bracketMax);
             reqMin = (pLevel > 4) ? pLevel - 4 : 1;
         } else {
             if (reqMin > reqMax) std::swap(reqMin, reqMax);
             if (reqMin < 1) reqMin = 1;
+
+            if (reqMin > levelCap) {
+                handler->PSendSysMessage("You can only draft bots up to level {}.", levelCap);
+                return true;
+            }
+            if (reqMax > levelCap) {
+                handler->PSendSysMessage("Bots above level {} cannot be drafted. Using range {} - {}.", levelCap, reqMin, levelCap);
+                reqMax = levelCap;
+            }
         }
 
         Group* group = player->GetGroup();
@@ -414,7 +449,6 @@ public:
 
         std::ostringstream teleLog;
         bool isTele = s_telemetryEnabled;
-        BotRaidConfigData* cfg = BotRaidConfigData::instance();
         
         if (isTele) {
             teleLog << "========================================================\n"
@@ -507,6 +541,11 @@ public:
                 Player* bot = pair.second;
                 if (!bot || bot == player || bot->GetGroup() || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() || bot->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST)) continue;
                 if (!PlayerbotsMgr::instance().GetPlayerbotAI(bot) || bot->GetTeamId() != player->GetTeamId()) continue;
+                // Only random bots: never pull another player's alt bots.
+                if (!sRandomPlayerbotMgr.IsRandomBot(bot)) continue;
+                // Leave bots alone that are queued for LFG/BGs or sitting inside an instance.
+                if (sLFGMgr->GetState(bot->GetGUID()) != lfg::LFG_STATE_NONE || bot->InBattlegroundQueue()) continue;
+                if (bot->GetMap()->Instanceable()) continue;
                 
                 uint32 bLevel = bot->GetLevel();
                 if (bLevel > reqMax) continue;
@@ -542,7 +581,7 @@ public:
                     pool.push_back(c);
                 }
             }
-            if (pool.size() >= (size_t)botsToDraft || currentMin <= 10) {
+            if (pool.size() >= (size_t)botsToDraft || currentMin <= 10 || atLevelCap) {
                 break;
             }
             currentMin--;
@@ -670,6 +709,7 @@ public:
             if (group->IsFull()) break;
             
             if (group->AddMember(bot)) {
+                s_draftedBots[player->GetGUID()].insert(bot->GetGUID());
                 if (bot->GetMapId() != player->GetMapId() || !bot->IsWithinDistInMap(player, 40.0f)) {
                     bot->CombatStop(true);
                     bot->TeleportTo(player->GetMapId(), player->GetPositionX(), player->GetPositionY(), 
@@ -751,10 +791,18 @@ public:
                     << "--- PRE-DISMISSAL BOT STATES (IDENTIFIED FOR REMOVAL) ---\n";
         }
 
+        // Only the bots this leader drafted; manually invited bots and alt bots stay.
+        std::unordered_set<ObjectGuid> drafted;
+        auto draftedItr = s_draftedBots.find(player->GetGUID());
+        if (draftedItr != s_draftedBots.end()) {
+            drafted = std::move(draftedItr->second);
+            s_draftedBots.erase(draftedItr);
+        }
+
         std::vector<ObjectGuid> botsToRemove;
         for (GroupReference* itr = initialGroup->GetFirstMember(); itr != nullptr; itr = itr->next()) {
             if (Player* member = itr->GetSource()) {
-                if (member != player && PlayerbotsMgr::instance().GetPlayerbotAI(member)) {
+                if (member != player && drafted.count(member->GetGUID()) && PlayerbotsMgr::instance().GetPlayerbotAI(member)) {
                     botsToRemove.push_back(member->GetGUID());
                     if (isTele) {
                         AppendBotStateTelemetry(teleLog, member);
@@ -762,6 +810,11 @@ public:
                     }
                 }
             }
+        }
+
+        if (botsToRemove.empty()) {
+            handler->SendSysMessage("You have no drafted mercenaries in your group.");
+            return true;
         }
 
         if (isTele) teleLog << "--- EXECUTING TEARDOWN SEQUENCE ---\n";
@@ -772,7 +825,7 @@ public:
                 if (isTele) {
                     bool isRandom = sRandomPlayerbotMgr.IsRandomBot(bot);
                     teleLog << "Processing Dismissal for: " << bot->GetName() << "\n"
-                            << "  Logic Branch: " << (isRandom ? "System RandomBot (Factory Wipe Scheduled)" : "Player Alt (Manual Cleanse Scheduled)") << "\n";
+                            << "  Logic Branch: " << (isRandom ? "System RandomBot (Factory Refresh Scheduled)" : "Player Alt (Manual Cleanse Scheduled)") << "\n";
                     
                     if (freeroam) {
                         teleLog << "  Relocating to Homebind: [SKIPPED - FREEROAM MODE ACTIVE]\n\n";
@@ -799,9 +852,9 @@ public:
                         bool isRandomBot = sRandomPlayerbotMgr.IsRandomBot(b);
 
                         if (isRandomBot) {
+                            // Restock and repair only; keep the bot's gear and talents.
                             PlayerbotFactory factory(b, b->GetLevel());
                             factory.Refresh();
-                            sRandomPlayerbotMgr.Randomize(b);
                             
                             bAi->ResetStrategies(false);
                             bAi->ChangeStrategy("+roam", BOT_STATE_NON_COMBAT);
