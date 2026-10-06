@@ -24,6 +24,8 @@
 #include "Config.h"
 #include "Map.h"
 #include "LFGMgr.h"
+#include "DBCStores.h"
+#include "InstanceSaveMgr.h"
 #include <vector>
 #include <string>
 #include <cmath>
@@ -299,6 +301,7 @@ public:
             { "telemetry", HandleTelemetry,  SEC_GAMEMASTER, Console::No },
             { "raids",     HandleRaids,      SEC_PLAYER, Console::No },
             { "sort",      HandleSort,       SEC_PLAYER, Console::No },
+            { "unbind",    HandleUnbind,     SEC_PLAYER, Console::No },
             { "version",   HandleVersion,    SEC_PLAYER, Console::No }
         };
         static ChatCommandTable commandTable = { { "botraid", botRaidTable } };
@@ -1103,6 +1106,90 @@ public:
             return true;
         }
         SortRaidGroups(group, handler);
+        return true;
+    }
+
+    static bool IsRaidMap(uint32 mapId)
+    {
+        MapEntry const* entry = sMapStore.LookupEntry(mapId);
+        return entry && entry->IsRaid();
+    }
+
+    // Clears raid lockouts of the random bots in the caller's group, so they can follow the
+    // leader into a fresh instance. Alt bots are real characters and keep their lockouts.
+    static bool HandleUnbind(ChatHandler* handler, Optional<std::string> optArg)
+    {
+        Player* player = handler->GetSession()->GetPlayer();
+        Group* group = player->GetGroup();
+        if (!group) {
+            handler->SendSysMessage("You need to be in a group with bots.");
+            return true;
+        }
+        if (!group->IsLeader(player->GetGUID()) && !group->IsAssistant(player->GetGUID())) {
+            handler->SendSysMessage("Only the group leader or an assistant can clear bot lockouts.");
+            return true;
+        }
+
+        bool all = false;
+        uint32 mapId = 0;
+        std::string raidName;
+        if (optArg) {
+            std::string arg = *optArg;
+            std::transform(arg.begin(), arg.end(), arg.begin(), ::tolower);
+            if (arg == "all") {
+                all = true;
+                raidName = "any raid";
+            } else if (auto const* encounter = BotRaidConfigData::instance()->FindEncounter(arg)) {
+                mapId = encounter->mapId;
+                raidName = encounter->name;
+            } else {
+                handler->PSendSysMessage("Unknown raid '{}'. Type .botraid raids for the short names.", *optArg);
+                return true;
+            }
+        } else if (IsRaidMap(player->GetMapId())) {
+            mapId = player->GetMapId();
+            MapEntry const* entry = sMapStore.LookupEntry(mapId);
+            raidName = entry->name[handler->GetSessionDbcLocale()];
+        } else {
+            handler->SendSysMessage("Syntax: .botraid unbind <raid|all>, for example .botraid unbind mc. Inside a raid, .botraid unbind clears that raid.");
+            return true;
+        }
+
+        uint32 cleared = 0, botsCleared = 0, keptInside = 0;
+        for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next()) {
+            Player* bot = itr->GetSource();
+            if (!bot || bot == player || !PlayerbotsMgr::instance().GetPlayerbotAI(bot) || !sRandomPlayerbotMgr.IsRandomBot(bot))
+                continue;
+
+            bool any = false;
+            for (uint8 d = 0; d < MAX_DIFFICULTY; ++d) {
+                Difficulty difficulty = Difficulty(d);
+                // Collect first: unbinding erases from the map being iterated.
+                std::vector<uint32> maps;
+                for (auto const& [boundMap, bind] : sInstanceSaveMgr->PlayerGetBoundInstances(bot->GetGUID(), difficulty))
+                    if (all ? IsRaidMap(boundMap) : boundMap == mapId)
+                        maps.push_back(boundMap);
+
+                for (uint32 boundMap : maps) {
+                    if (bot->GetMapId() == boundMap) {
+                        ++keptInside;
+                        continue;
+                    }
+                    sInstanceSaveMgr->PlayerUnbindInstance(bot->GetGUID(), boundMap, difficulty, true, bot);
+                    ++cleared;
+                    any = true;
+                }
+            }
+            if (any)
+                ++botsCleared;
+        }
+
+        if (cleared)
+            handler->PSendSysMessage("Cleared {} lockout(s) for {} on {} bot(s).", cleared, raidName, botsCleared);
+        else if (!keptInside)
+            handler->PSendSysMessage("None of your group's random bots are locked to {}.", raidName);
+        if (keptInside)
+            handler->PSendSysMessage("{} lockout(s) kept because those bots are inside the raid. Have them leave it first.", keptInside);
         return true;
     }
 

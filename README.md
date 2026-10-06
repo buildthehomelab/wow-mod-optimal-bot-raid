@@ -18,6 +18,7 @@ Tired of manually drafting, whispering, and grouping bots to ensure you have the
 > * `.botraid dismiss` only releases the bots `.botraid assemble` drafted for you. Bots you invited yourself and your alt bots stay in the group.
 > * Dismissed random bots are restocked and repaired, not re-randomized, so they keep their gear and talents.
 > * `.botraid telemetry` and `.botraid debug` are GM-only.
+> * `.botraid unbind` clears raid lockouts of the random bots in your group. Alt bots are real characters and keep theirs.
 
 ## Patch Notes: Bot Raid Assembly
 
@@ -29,6 +30,7 @@ Category: Bots
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
 - **Raid lineups:** every raid now has its own lineup. Assemble inside the raid, or type its short name anywhere, for example **.botraid assemble mc**, **.botraid assemble bwl** or **.botraid assemble icc 25**. Each one brings the extra tanks and healers that raid needs and fewer melee where the bosses punish them. Type **.botraid raids** for the list.
 - **Raid groups are sorted for you.** After assembling, tanks go in group 1, then melee, hunters, casters and healers each get their own groups. Shamans are spread one per group, melee groups first, so Windfury and the other totems reach the people who need them. Type **.botraid sort** to sort again at any time (raid leader or assistant).
+- **Reset your bots' raid lockouts.** If bots are locked to a different copy of a raid and can't follow you in, type **.botraid unbind mc** (or any raid's short name), or **.botraid unbind all**. Inside a raid, **.botraid unbind** clears that raid. Only the random bots in your group are reset, never your own lockout.
 
 ---
 
@@ -123,7 +125,17 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 * Sorts human players too. Offline members keep their slots.
 * Lists the new groups in chat.
 
-### 6. Check Module Version
+### 6. Clear Bot Raid Lockouts
+**Syntax:** `.botraid unbind [<raid>|all]`  
+*(Group leader or assistant)*  
+**Examples:** `.botraid unbind mc` | `.botraid unbind naxx` | `.botraid unbind all`  
+**What it does:**
+* Clears the raid lockouts of the random bots in your group, for the named raid (the short names from `.botraid raids`) or for every raid with `all`. Inside a raid, `.botraid unbind` with no name clears that raid.
+* Use it when bots are saved to a different copy of a raid than yours and can't enter with you.
+* Covers every size and difficulty of the raid, so `naxx` clears both the 40-man and the 10/25-man Naxxramas.
+* Your own lockout, human players and alt bots are untouched. A bot standing inside that raid keeps its lockout; have it leave first.
+
+### 7. Check Module Version
 **Syntax:** `.botraid version`  
 **What it does:**
 * Prints the C++ compilation date and time to verify the binary mapped against your AzerothCore environment.
@@ -248,7 +260,7 @@ tank plus up to three assist tanks (Maulgar, Magtheridon's Channelers, Karathres
 
 For developers and contributors, this module hooks into the following core systems natively:
 
-* **CommandScript** (`cs_optimal_bot_raid`): Registers the `.botraid` logic table (assemble, dismiss, debug, version).
+* **CommandScript** (`cs_optimal_bot_raid`): Registers the `.botraid` logic table (assemble, dismiss, raids, sort, unbind, debug, telemetry, version).
 * **Concurrency Hooks:** Directly requests thread-safe locks via `HashMapHolder<Player>::GetLock()` to pause background task modifications when polling global online entities.
 * **AI Interception:** Hooks into `PlayerbotsMgr` to assess and purge active combat parameters. Exploits delayed `PlayerbotAI::AddTimedEvent()` callbacks to sidestep asynchronous `ResetAiAction` race conditions on bot dismissals. Implements explicit diagnostic tracking writing custom telemetry hooks to standard `worldserver` log channels.
 
