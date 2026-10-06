@@ -35,6 +35,7 @@
 #include <cctype>
 #include <ctime>
 #include <shared_mutex>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include "Log.h"
@@ -65,9 +66,31 @@ struct BotRaidConfigData {
 
     struct Quota { int tanks; int healers; int melee; };
     Quota quotas[7]; // Indexes: 0=5, 1=10, 2=15, 3=20, 4=25, 5=40Vanilla, 6=40WotLK
-    // Onyxia's Lair: 0=10, 1=25 (WotLK), 2=40 (individual-progression). Ranged-heavy because
-    // only ranged can hit her during the air phase.
-    Quota onyxiaQuotas[3];
+
+    // Raid-specific lineups, used inside the raid's map or with .botraid assemble <alias> <size>.
+    struct EncounterLineup {
+        std::string name;                  // shown to the player
+        std::string configKey;             // OptimalBotRaid.Quota.<configKey>.<size>.*
+        std::vector<std::string> aliases;  // lower case
+        uint32 mapId;
+        std::string reason;                // why this lineup, shown to the player
+        std::map<uint32, Quota> quotas;    // by raid size
+    };
+    std::vector<EncounterLineup> encounters;
+
+    EncounterLineup const* FindEncounter(std::string const& alias) const {
+        for (EncounterLineup const& e : encounters)
+            if (std::find(e.aliases.begin(), e.aliases.end(), alias) != e.aliases.end())
+                return &e;
+        return nullptr;
+    }
+
+    EncounterLineup const* FindEncounter(uint32 mapId) const {
+        for (EncounterLineup const& e : encounters)
+            if (e.mapId == mapId)
+                return &e;
+        return nullptr;
+    }
 
     static BotRaidConfigData* instance() {
         static BotRaidConfigData instance;
@@ -140,9 +163,25 @@ struct BotRaidConfigData {
         quotas[5] = LoadQuotaVal("OptimalBotRaid.Quota.40Vanilla", 4, 10, 10, 40);
         quotas[6] = LoadQuotaVal("OptimalBotRaid.Quota.40WotLK", 3, 8, 10, 40);
 
-        onyxiaQuotas[0] = LoadQuotaVal("OptimalBotRaid.Quota.Onyxia.10", 2, 2, 1, 10);
-        onyxiaQuotas[1] = LoadQuotaVal("OptimalBotRaid.Quota.Onyxia.25", 3, 5, 3, 25);
-        onyxiaQuotas[2] = LoadQuotaVal("OptimalBotRaid.Quota.Onyxia.40", 4, 10, 4, 40);
+
+        // Defaults (tanks, healers, melee max); ranged fills the rest.
+        encounters = {
+            // Onyxia's Lair: 10/25 is the WotLK version, 40 is individual-progression's.
+            // Only ranged can hit her during the air phase.
+            { "Onyxia", "Onyxia", { "onyxia", "ony" }, MAP_ONYXIAS_LAIR,
+              "only ranged can hit her in the air",
+              { { 10, { 2, 2, 1 } }, { 25, { 3, 5, 3 } }, { 40, { 4, 10, 4 } } } },
+            // Molten Core: Garr, Golemagg and Majordomo need extra tanks for their adds, and
+            // Ragnaros knocks melee back into the lava.
+            { "Molten Core", "MoltenCore", { "mc", "moltencore", "molten" }, MAP_MOLTEN_CORE,
+              "extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava",
+              { { 40, { 5, 11, 8 } } } },
+        };
+
+        for (EncounterLineup& e : encounters)
+            for (auto& [size, quota] : e.quotas)
+                quota = LoadQuotaVal("OptimalBotRaid.Quota." + e.configKey + "." + std::to_string(size),
+                    quota.tanks, quota.healers, quota.melee, (int)size);
     }
 };
 
@@ -369,15 +408,21 @@ public:
 
     static bool HandleAssemble(ChatHandler* handler, std::string arg1, Optional<uint32> optSize)
     {
-        // Encounter lineup (.botraid assemble onyxia 40), for assembling outside the instance.
+        // Raid lineup (.botraid assemble onyxia 40, .botraid assemble mc), for assembling
+        // outside the instance.
         std::string lower = arg1;
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        if (lower == "onyxia" || lower == "ony") {
-            if (!optSize) {
-                handler->SendSysMessage("Give a raid size. Example: .botraid assemble onyxia 40 (or 10, 25)");
-                return true;
-            }
-            return ExecuteAssemble(handler, 0, 0, false, *optSize, true);
+        if (auto const* encounter = BotRaidConfigData::instance()->FindEncounter(lower)) {
+            if (optSize)
+                return ExecuteAssemble(handler, 0, 0, false, *optSize, encounter);
+            if (encounter->quotas.size() == 1)
+                return ExecuteAssemble(handler, 0, 0, false, encounter->quotas.begin()->first, encounter);
+
+            std::string sizes;
+            for (auto const& [size, quota] : encounter->quotas)
+                sizes += (sizes.empty() ? "" : ", ") + std::to_string(size);
+            handler->PSendSysMessage("Give a raid size for {}: .botraid assemble {} <{}>", encounter->name, lower, sizes);
+            return true;
         }
 
         // Case 1: The user passed two arguments (.botraid assemble 60-67 40)
@@ -412,7 +457,8 @@ public:
         }
     }
 
-    static bool ExecuteAssemble(ChatHandler* handler, uint32 reqMin, uint32 reqMax, bool hasCustomRange, uint32 size, bool forOnyxia = false)
+    static bool ExecuteAssemble(ChatHandler* handler, uint32 reqMin, uint32 reqMax, bool hasCustomRange, uint32 size,
+        BotRaidConfigData::EncounterLineup const* encounter = nullptr)
     {
         Player* player = handler->GetSession()->GetPlayer();
         
@@ -489,18 +535,28 @@ public:
 
         BotRaidConfigData::Quota q = cfg->quotas[qIdx];
 
-        // Onyxia lineup when asked for, or when assembling inside her lair.
-        int onyIdx = (size == 10) ? 0 : (size == 25) ? 1 : (size == 40) ? 2 : -1;
-        if (forOnyxia && onyIdx < 0)
-            handler->PSendSysMessage("No Onyxia lineup for {}-man (use 10, 25 or 40); using the standard {}-man lineup.", size, size);
-        forOnyxia = (forOnyxia || player->GetMapId() == MAP_ONYXIAS_LAIR) && onyIdx >= 0;
-        if (forOnyxia) {
-            q = cfg->onyxiaQuotas[onyIdx];
+        // Raid lineup when asked for, or when assembling inside that raid.
+        bool const askedForEncounter = encounter != nullptr;
+        if (!encounter)
+            encounter = cfg->FindEncounter(player->GetMapId());
+        BotRaidConfigData::Quota const* lineup = nullptr;
+        if (encounter) {
+            auto it = encounter->quotas.find(size);
+            if (it != encounter->quotas.end())
+                lineup = &it->second;
+        }
+        if (encounter && !lineup) {
+            if (askedForEncounter)
+                handler->PSendSysMessage("No {} lineup for {}-man; using the standard {}-man lineup.", encounter->name, size, size);
+            encounter = nullptr;
+        }
+        if (encounter) {
+            q = *lineup;
             int ranged = (int)size - q.tanks - q.healers - q.melee;
-            handler->PSendSysMessage("Onyxia lineup: {} tanks, {} healers, {} melee, {} ranged (only ranged can hit her in the air).",
-                q.tanks, q.healers, q.melee, ranged);
+            handler->PSendSysMessage("{} lineup: {} tanks, {} healers, {} melee, {} ranged ({}).",
+                encounter->name, q.tanks, q.healers, q.melee, ranged, encounter->reason);
             if (isTele)
-                teleLog << "Encounter Lineup: Onyxia " << size << "-man\n\n";
+                teleLog << "Encounter Lineup: " << encounter->name << " " << size << "-man\n\n";
         }
 
         int reqTanks = std::min(q.tanks, (int)size);
