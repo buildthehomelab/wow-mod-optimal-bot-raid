@@ -8,6 +8,24 @@ An advanced, mathematically optimized C++ raid orchestration module for **Azerot
 
 Tired of manually drafting, whispering, and grouping bots to ensure you have the right buffs for a raid? This module introduces a highly performant C++ algorithm that instantly scans your server's entire bot population, solves the **Set Cover** (raid buff synergies) and **Knapsack** (GearScore/AI competency) optimization problems, and teleports the mathematically perfect raid composition directly to you.
 
+> **Fork note.** This is the [buildthehomelab](https://github.com/buildthehomelab) fork of
+> [barnaclebarry/mod-optimal-bot-raid](https://github.com/barnaclebarry/mod-optimal-bot-raid), changed for a
+> public server where every player can use `.botraid`:
+>
+> * Players can't draft bots more than `OptimalBotRaid.MaxLevelAbovePlayer` levels above themselves (default 2). Custom ranges are clamped; GMs are exempt.
+> * Only random bots are drafted, never another player's alt bots, and bots queued for LFG/battlegrounds or inside an instance are skipped.
+> * `.botraid dismiss` only releases the bots `.botraid assemble` drafted for you. Bots you invited yourself and your alt bots stay in the group.
+> * Dismissed random bots are restocked and repaired, not re-randomized, so they keep their gear and talents.
+> * `.botraid telemetry` and `.botraid debug` are GM-only.
+
+## Patch Notes: Bot Raid Assembly
+
+Category: Bots
+
+- Type **.botraid assemble 10** to fill your group with bots picked for the right tanks, healers and raid buffs. They join you right away, wherever you are. Sizes 5, 10, 15, 20, 25 and 40 are supported.
+- Bots are drafted around your level and never more than 2 levels above you. You can ask for a range, for example **.botraid assemble 58-60 10**.
+- Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
+
 ---
 
 ## ⚠️ Critical Dependency Warning
@@ -38,7 +56,7 @@ This module is built to standard AzerothCore specifications and must be compiled
    ```
 2. Clone this repository (or copy the mod-optimal-bot-raid directory in):
    ```bash
-   git clone [https://github.com/barnaclebarry/mod-optimal-bot-raid.git](https://github.com/barnaclebarry/mod-optimal-bot-raid.git)
+   git clone https://github.com/buildthehomelab/wow-mod-optimal-bot-raid.git mod-optimal-bot-raid
    ```
 3. Re-run CMake to generate the build files, and compile:
    ```bash
@@ -63,7 +81,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 **What it does:**
 * Evaluates your current group (and any human friends currently with you).
 * Calculates missing roles based on strict Ranged-to-Melee bias quotas to prevent melee cleave deaths.
-* Scans the server safely for idle, out-of-combat bots matching your level bracket. If a custom bracket is not provided, defaults to +/- 4 levels of the leader.
+* Scans the server safely for idle, out-of-combat bots matching your level bracket. If a custom bracket is not provided, defaults to 4 levels below the leader up to `OptimalBotRaid.MaxLevelAbovePlayer` levels above (custom brackets are clamped to the same cap; GMs are exempt). Only random bots that aren't queued for LFG/battlegrounds or inside an instance are considered.
 * **Intelligent Relaxation:** If there are not enough bots in the desired bracket, it will dynamically and gradually relax the minimum level limit down (as far as level 10) to fulfill the draft, while explicitly notifying you of the adjusted range.
 * Scores them based on their Normalized GearScore and the missing unique buffs they bring to your current comp.
 * Invites them, converts the group to a raid, teleports them to your exact coordinates/instance, and resets their AI to follow you.
@@ -71,16 +89,16 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 ### 2. Dismiss the Mercenaries
 **Syntax:** `.botraid dismiss [freeroam]`  
 **What it does:**
-* Safely removes every mod-playerbot from your current group (human players are completely untouched).
+* Removes the bots `.botraid assemble` drafted for you from your current group. Human players, bots you invited yourself and your alt bots are untouched. The list is kept in memory, so it is lost on a server restart.
 * Severs the AI master link and halts physics/momentum natively via `bot->StopMoving()` and `MotionMaster->Clear()`.
 * If `freeroam` is specified, the script cuts the bots loose right in their current spot without natively teleporting them back to their home Innkeeper bind.
 * **Defeats Asynchronous AI Race Conditions:** Uses a 1000ms `AddTimedEvent()` delayed lambda callback. This intentionally bypasses the notorious `ResetAiAction` race condition inherent to the Playerbot core, ensuring mercenaries accurately decouple from the raid leader without freezing into un-targetable statues.
 * **Executes a Split Strategy Cleanse:**
-  * **System RandomBots** are fully factory refreshed and randomized.
+  * **System RandomBots** are factory refreshed (restocked, repaired), keeping their gear and talents.
   * **Offline Player Alts** receive manual strategy stripping (`-follow`, `-dps assist`, etc.) to protect their customized gear.
   * Both are forced into `+roam` state and are naturally removed.
 
-### 3. Generate Telemetry (Debug Mode)
+### 3. Generate Telemetry (Debug Mode, GM only)
 **Syntax:** `.botraid debug`  
 *(Requires you to target a bot)*  
 **What it does:**

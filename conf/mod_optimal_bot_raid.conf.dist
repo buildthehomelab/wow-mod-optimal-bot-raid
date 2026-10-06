@@ -3,6 +3,17 @@
 # Optimal Bot Raid Configuration
 #
 # ==============================================================================
+# LEVEL CAP
+# ==============================================================================
+# OptimalBotRaid.MaxLevelAbovePlayer
+#    Description: Highest bot level a player may draft, relative to their own level.
+#                 Custom ranges (.botraid assemble 60-67 40) are clamped to it.
+#                 GMs are exempt.
+#    Range:       0 to 80
+#    Default:     2
+OptimalBotRaid.MaxLevelAbovePlayer = 2
+
+# ==============================================================================
 # ALGORITHM HEURISTIC WEIGHTS
 # ==============================================================================
 # The bot drafting algorithm calculates a "Final Score" for every bot based on 
