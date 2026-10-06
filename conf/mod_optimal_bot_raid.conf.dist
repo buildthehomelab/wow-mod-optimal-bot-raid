@@ -6,12 +6,22 @@
 # LEVEL CAP
 # ==============================================================================
 # OptimalBotRaid.MaxLevelAbovePlayer
-#    Description: Highest bot level a player may draft, relative to their own level.
+#    Description: Highest bot level a player may draft, relative to their own level,
+#                 and never past the end of their 60/70/80 bracket.
 #                 Custom ranges (.botraid assemble 60-67 40) are clamped to it.
 #                 GMs are exempt.
 #    Range:       0 to 80
 #    Default:     2
 OptimalBotRaid.MaxLevelAbovePlayer = 2
+
+# OptimalBotRaid.SameLevelAtCaps
+#    Description: At level 60, 70 and 80 players only draft bots of exactly their
+#                 level (no lower-level fill-ins). The cap above also never reaches
+#                 past the player's bracket (a level 59 can't draft level 61 bots).
+#                 GMs are exempt.
+#    Default:     1 - (Enabled)
+#                 0 - (Disabled)
+OptimalBotRaid.SameLevelAtCaps = 1
 
 # ==============================================================================
 # ALGORITHM HEURISTIC WEIGHTS

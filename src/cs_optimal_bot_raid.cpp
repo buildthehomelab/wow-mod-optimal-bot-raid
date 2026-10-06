@@ -61,6 +61,7 @@ struct BotRaidConfigData {
     float aiMult[12][3]; // Index by [Class ID][Tree]
 
     int32 maxLevelAbovePlayer;
+    bool sameLevelAtCaps;
 
     struct Quota { int tanks; int healers; int melee; };
     Quota quotas[7]; // Indexes: 0=5, 1=10, 2=15, 3=20, 4=25, 5=40Vanilla, 6=40WotLK
@@ -98,6 +99,7 @@ struct BotRaidConfigData {
         buffReplenishment = LoadAndValidateFloat("OptimalBotRaid.Algo.Bonus.Replenishment", 0.2f, 0.0f, 10.0f);
 
         maxLevelAbovePlayer = LoadAndValidateInt("OptimalBotRaid.MaxLevelAbovePlayer", 2, 0, 80);
+        sameLevelAtCaps     = sConfigMgr->GetOption<bool>("OptimalBotRaid.SameLevelAtCaps", true);
 
         const char* clsMap[12] = {"", "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "DK", "Shaman", "Mage", "Warlock", "", "Druid"};
         float defMult[12][3] = {
@@ -411,10 +413,18 @@ public:
         uint32 pLevel = player->GetLevel();
         // Players may not draft bots far above their own level; GMs are exempt.
         bool isGM = handler->GetSession()->GetSecurity() >= SEC_GAMEMASTER;
-        uint32 levelCap = isGM ? STRONG_MAX_LEVEL : pLevel + cfg->maxLevelAbovePlayer;
+        uint32 bracketMax = (pLevel <= 60) ? 60 : ((pLevel <= 70) ? 70 : 80);
+        // Never past the end of the player's expansion bracket either (a 59 can't pull 61s).
+        uint32 levelCap = isGM ? STRONG_MAX_LEVEL : std::min<uint32>(pLevel + cfg->maxLevelAbovePlayer, bracketMax);
+        // At 60, 70 and 80 players only draft bots of exactly their level.
+        bool atLevelCap = !isGM && cfg->sameLevelAtCaps && (pLevel == 60 || pLevel == 70 || pLevel == 80);
 
-        if (!hasCustomRange) {
-            reqMax = std::min<uint32>(levelCap, (pLevel <= 60) ? 60 : ((pLevel <= 70) ? 70 : 80));
+        if (atLevelCap) {
+            if (hasCustomRange && (reqMin != pLevel || reqMax != pLevel))
+                handler->PSendSysMessage("At level {} you can only draft level {} bots.", pLevel, pLevel);
+            reqMin = reqMax = pLevel;
+        } else if (!hasCustomRange) {
+            reqMax = std::min<uint32>(levelCap, bracketMax);
             reqMin = (pLevel > 4) ? pLevel - 4 : 1;
         } else {
             if (reqMin > reqMax) std::swap(reqMin, reqMax);
@@ -571,7 +581,7 @@ public:
                     pool.push_back(c);
                 }
             }
-            if (pool.size() >= (size_t)botsToDraft || currentMin <= 10) {
+            if (pool.size() >= (size_t)botsToDraft || currentMin <= 10 || atLevelCap) {
                 break;
             }
             currentMin--;

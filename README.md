@@ -12,7 +12,8 @@ Tired of manually drafting, whispering, and grouping bots to ensure you have the
 > [barnaclebarry/mod-optimal-bot-raid](https://github.com/barnaclebarry/mod-optimal-bot-raid), changed for a
 > public server where every player can use `.botraid`:
 >
-> * Players can't draft bots more than `OptimalBotRaid.MaxLevelAbovePlayer` levels above themselves (default 2). Custom ranges are clamped; GMs are exempt.
+> * Players can't draft bots more than `OptimalBotRaid.MaxLevelAbovePlayer` levels above themselves (default 2), or past the end of their 60/70/80 bracket. Custom ranges are clamped; GMs are exempt.
+> * At level 60, 70 and 80 players only draft bots of exactly their level (`OptimalBotRaid.SameLevelAtCaps`), with no lower-level fill-ins.
 > * Only random bots are drafted, never another player's alt bots, and bots queued for LFG/battlegrounds or inside an instance are skipped.
 > * `.botraid dismiss` only releases the bots `.botraid assemble` drafted for you. Bots you invited yourself and your alt bots stay in the group.
 > * Dismissed random bots are restocked and repaired, not re-randomized, so they keep their gear and talents.
@@ -23,7 +24,8 @@ Tired of manually drafting, whispering, and grouping bots to ensure you have the
 Category: Bots
 
 - Type **.botraid assemble 10** to fill your group with bots picked for the right tanks, healers and raid buffs. They join you right away, wherever you are. Sizes 5, 10, 15, 20, 25 and 40 are supported.
-- Bots are drafted around your level and never more than 2 levels above you. You can ask for a range, for example **.botraid assemble 58-60 10**.
+- Bots are drafted around your level and never more than 2 levels above you. You can ask for a range, for example **.botraid assemble 55-58 10**.
+- At level 60, 70 and 80 you only draft bots of your own level.
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
 
 ---
