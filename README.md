@@ -27,8 +27,7 @@ Category: Bots
 - Bots are drafted around your level and never more than 2 levels above you. You can ask for a range, for example **.botraid assemble 55-58 10**.
 - At level 60, 70 and 80 you only draft bots of your own level.
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
-- **Onyxia lineup:** assembling inside Onyxia's Lair, or typing **.botraid assemble onyxia 40** (or 10, 25) anywhere, drafts a ranged-heavy raid, since only ranged can hit Onyxia while she's flying. Works for the 10/25-man and the 40-man version.
-- **Molten Core lineup:** assembling inside Molten Core, or typing **.botraid assemble mc** anywhere, drafts 5 tanks for Garr, Golemagg and Majordomo's adds, 11 healers, and fewer melee, since Ragnaros knocks melee into the lava.
+- **Raid lineups:** every raid now has its own lineup. Assemble inside the raid, or type its short name anywhere, for example **.botraid assemble mc**, **.botraid assemble bwl** or **.botraid assemble icc 25**. Each one brings the extra tanks and healers that raid needs and fewer melee where the bosses punish them. Type **.botraid raids** for the list.
 
 ---
 
@@ -81,7 +80,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 ### 1. Assemble a Group or Raid
 **Syntax:** `.botraid assemble [<min-max>] <size>`  
 **Supported Sizes:** 5, 10, 15, 20, 25, 40  
-**Examples:** `.botraid assemble 10` | `.botraid assemble 60-67 40` | `.botraid assemble onyxia 40` | `.botraid assemble mc`  
+**Examples:** `.botraid assemble 10` | `.botraid assemble 60-67 40` | `.botraid assemble onyxia 40` | `.botraid assemble mc` | `.botraid assemble icc 25`  
 **What it does:**
 * Evaluates your current group (and any human friends currently with you).
 * Calculates missing roles based on strict Ranged-to-Melee bias quotas to prevent melee cleave deaths.
@@ -109,7 +108,12 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 * Extracts real-time C++ diagnostic state data from the selected bot (MotionMaster Type, Unit State, Combat State, AI Master links, and loaded Strategy arrays).
 * Dumps the payload to `botraid_debug.log` located inside your server's configured `LogsDir` (or the container's mounted log volume). Crucial for server admins tracking down frozen AI states or strategy loops.
 
-### 4. Check Module Version
+### 4. List Raid Lineups
+**Syntax:** `.botraid raids`  
+**What it does:**
+* Lists every raid lineup with the name to type and its tanks/healers/melee/ranged per size. See [Raid Lineups](#raid-lineups).
+
+### 5. Check Module Version
 **Syntax:** `.botraid version`  
 **What it does:**
 * Prints the C++ compilation date and time to verify the binary mapped against your AzerothCore environment.
@@ -144,26 +148,76 @@ The algorithm strictly enforces the following quotas to ensure boss survivabilit
 
 ### Raid Lineups
 Used instead of the table above when the leader assembles inside the raid, or anywhere with
-`.botraid assemble <raid> [size]`. Sizes without a lineup fall back to the standard one. A raid
-with a single size (Molten Core) doesn't need the size. Configurable under
-`OptimalBotRaid.Quota.<Raid>.<size>.*`.
+`.botraid assemble <raid> [size]` (`.botraid raids` lists them in game). Sizes without a lineup
+fall back to the standard one, and a raid with a single size doesn't need the size. Configurable
+under `OptimalBotRaid.Quota.<Raid>.<size>.*`. Onyxia's Lair and Naxxramas share their map between
+the WotLK 10/25 versions and mod-individual-progression's 40-man versions; the size picks which.
 
-| Raid | Command | Tanks | Healers | Melee (Max) | Ranged |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Onyxia 10-man** | `onyxia 10` / `ony 10` | 2 | 2 | 1 | 5 |
-| **Onyxia 25-man** | `onyxia 25` | 3 | 5 | 3 | 14 |
-| **Onyxia 40-man (individual-progression)** | `onyxia 40` | 4 | 10 | 4 | 22 |
-| **Molten Core** | `mc` / `moltencore` | 5 | 11 | 8 | 16 |
+The numbers start from the tank and healer counts raid guides recommend, then lean toward ranged
+where bosses punish melee (bots react late to knockbacks, cleaves and whirlwinds) and add a
+healer where raid damage is heavy (bot healers are less efficient than players). Warlock, mage
+and hunter tanking jobs count as ranged, because tanks are drafted by spec.
 
-* **Onyxia:** her air phase (65% to 40% health) is out of melee reach, so these draft as much
-  ranged as the raid can carry. The extra tank picks up the Onyxian Lair Guards (10/25) and whelp
-  waves (40).
-* **Molten Core:** classic guides run 3-5 tanks and 10-12 healers
-  ([Warcraft Tavern](https://www.warcrafttavern.com/wow-classic/guides/mc/),
-  [Boosting Ground](https://boosting-ground.com/wow-classic/guides/raid-guides/molten-core-guide)).
-  Garr, Golemagg (two Core Ragers) and Majordomo (eight adds) need extra tanks, and Ragnaros's Wrath
-  knocks melee back into the lava, so this takes the top of both ranges and fewer melee than the
-  stock vanilla 40.
+#### Vanilla
+
+| Raid | Command | Size | Tanks | Healers | Melee (Max) | Ranged | Why |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Zul'Gurub** | `zg` / `zulgurub` | 20 | 3 | 6 | 3 | 8 | Hakkar mind-controls tanks and Thekal splits three ways; Venoxis and Arlokk punish melee |
+| **Ruins of Ahn'Qiraj** | `aq20` / `ruins` | 20 | 3 | 5 | 3 | 9 | Extra tank for Kurinnaxx swaps and Rajaxx waves; Moam, Ayamiss and Ossirian favor ranged |
+| **Onyxia** | `onyxia` / `ony` | 10 | 2 | 2 | 1 | 5 | Only ranged can hit her in the air |
+|  |  | 25 | 3 | 5 | 3 | 14 |  |
+|  |  | 40 | 4 | 10 | 4 | 22 |  |
+| **Molten Core** | `mc` / `moltencore` / `molten` | 40 | 5 | 11 | 8 | 16 | Extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava |
+| **Blackwing Lair** | `bwl` / `blackwinglair` | 40 | 5 | 13 | 7 | 15 | Five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing |
+| **Temple of Ahn'Qiraj** | `aq40` / `temple` | 40 | 5 | 12 | 7 | 16 | Tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee |
+| **Naxxramas** | `naxx` / `naxxramas` | 10 | 2 | 2 | 2 | 4 | Extra tanks for Patchwerk, Thaddius and the Horsemen; Heigan and Sapphiron favor ranged |
+|  |  | 25 | 3 | 5 | 5 | 12 |  |
+|  |  | 40 | 6 | 12 | 6 | 16 |  |
+
+#### The Burning Crusade
+
+| Raid | Command | Size | Tanks | Healers | Melee (Max) | Ranged | Why |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Karazhan** | `kara` / `karazhan` | 10 | 2 | 3 | 2 | 3 | Third healer for Prince and Nightbane; Aran and Prince punish melee |
+| **Zul'Aman** | `za` / `zulaman` | 10 | 2 | 3 | 2 | 3 | Nalorakk tank swap and Halazzi split; Akil'zon and Zul'jin's Whirlwind punish melee |
+| **Gruul's Lair** | `gruul` / `gruulslair` | 25 | 3 | 7 | 4 | 11 | Three tanks for Maulgar's council; Whirlwind and Shatter punish melee |
+| **Magtheridon's Lair** | `mag` / `magtheridon` | 25 | 3 | 7 | 5 | 10 | Three tanks to split the five Channelers, each with its own healer |
+| **Serpentshrine Cavern** | `ssc` / `serpentshrine` | 25 | 4 | 7 | 4 | 10 | Four tanks for Karathress and his guards; Lurker and Leotheras punish melee |
+| **Tempest Keep** | `tk` / `tempestkeep` | 25 | 3 | 7 | 5 | 10 | Tanks for Al'ar and Kael'thas's advisors; Flamestrike punishes stacked melee |
+| **Hyjal Summit** | `hyjal` / `mh` | 25 | 3 | 7 | 5 | 10 | Third tank for trash waves, Infernals and Doomguards; Archimonde punishes melee |
+| **Black Temple** | `bt` / `blacktemple` | 25 | 3 | 7 | 4 | 11 | Three tanks for Bloodboil, Shahraz, the Council and Illidan's Flames; Illidan punishes melee |
+| **Sunwell Plateau** | `swp` / `sunwell` | 25 | 3 | 8 | 4 | 10 | Hardest healing tier; M'uru needs three tanks and Darkness pushes melee out |
+
+#### Wrath of the Lich King (Naxxramas and Onyxia are above)
+
+| Raid | Command | Size | Tanks | Healers | Melee (Max) | Ranged | Why |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Obsidian Sanctum** | `os` / `obsidian` / `sartharion` | 10 | 2 | 2 | 1 | 5 | Fire walls and lava waves sweep the melee; the drakes need an off-tank |
+|  |  | 25 | 2 | 5 | 5 | 13 |  |
+| **Eye of Eternity** | `eoe` / `malygos` | 10 | 2 | 2 | 2 | 4 | Ranged kill the Scions in phase 2 while tanks hold the Nexus Lords |
+|  |  | 25 | 2 | 5 | 5 | 13 |  |
+| **Vault of Archavon** | `voa` / `vault` / `archavon` | 10 | 2 | 2 | 2 | 4 | Emalon's Lightning Nova punishes melee; Koralon and Toravon need tank swaps |
+|  |  | 25 | 2 | 5 | 5 | 13 |  |
+| **Ulduar** | `uld` / `ulduar` | 10 | 2 | 3 | 1 | 4 | Iron Council needs extra tanks; Mimiron, XT and Vezax punish melee; heavy raid damage |
+|  |  | 25 | 3 | 6 | 4 | 12 |  |
+| **Trial of the Crusader** | `toc` / `totc` / `crusader` | 10 | 2 | 2 | 2 | 4 | Anub'arak's Burrowers need off-tanks; Champions and Leeching Swarm burst the raid |
+|  |  | 25 | 3 | 6 | 4 | 12 |  |
+| **Icecrown Citadel** | `icc` / `icecrown` | 10 | 2 | 3 | 1 | 4 | Sindragosa, Marrowgar and the Lich King punish melee; Valithria and Putricide need healing |
+|  |  | 25 | 2 | 6 | 5 | 12 |  |
+| **Ruby Sanctum** | `rs` / `ruby` / `halion` | 10 | 2 | 3 | 1 | 4 | Halion splits the raid: melee in the Twilight realm, ranged in the Physical realm |
+|  |  | 25 | 2 | 6 | 6 | 11 |  |
+
+Sources: [Warcraft Tavern](https://www.warcrafttavern.com/) raid guides for every tier (Classic, TBC and
+WotLK, per-boss pages for Naxxramas 25, Ulduar, ToC, Sartharion, Malygos, VoA and Ruby Sanctum),
+[Boosting Ground MC](https://boosting-ground.com/wow-classic/guides/raid-guides/molten-core-guide),
+[wowtbc.gg Naxxramas 25 / ICC / ToGC](https://wowtbc.gg/wotlk/boss-guides/naxxramas-(25)/),
+[expcarry Black Temple](https://expcarry.com/tbc-anniversary-black-temple-raid-composition),
+[noobtoboss Tempest Keep](https://noobtoboss.com/tbc-classic-tempest-keep-best-classes/),
+[Icy Veins Ruby Sanctum](https://www.icy-veins.com/wotlk-classic/ruby-sanctum-raid-guide),
+[Warmane ICC composition thread](https://forum.warmane.com/showthread.php?t=410826) and the
+[original 40-man Four Horsemen thread](https://www.mmo-champion.com/threads/1319568-Original-Naxx-4-Horsemen-hardest-encounter-ever).
+Tank counts were also checked against the mod-playerbots raid strategies, which assign a main
+tank plus up to three assist tanks (Maulgar, Magtheridon's Channelers, Karathress, Iron Council).
 
 ---
 

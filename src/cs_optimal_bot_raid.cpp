@@ -164,18 +164,81 @@ struct BotRaidConfigData {
         quotas[6] = LoadQuotaVal("OptimalBotRaid.Quota.40WotLK", 3, 8, 10, 40);
 
 
-        // Defaults (tanks, healers, melee max); ranged fills the rest.
+        // Defaults (tanks, healers, melee max); ranged fills the rest. Sources and reasoning are
+        // in the README. Shared maps (Onyxia, Naxxramas) key their WotLK and 40-man versions by size.
         encounters = {
-            // Onyxia's Lair: 10/25 is the WotLK version, 40 is individual-progression's.
-            // Only ranged can hit her during the air phase.
+            // Vanilla
+            { "Zul'Gurub", "ZulGurub", { "zg", "zulgurub" }, MAP_ZUL_GURUB,
+              "Hakkar mind-controls tanks and Thekal splits three ways; Venoxis and Arlokk punish melee",
+              { { 20, { 3, 6, 3 } } } },
+            { "Ruins of Ahn'Qiraj", "RuinsOfAhnQiraj", { "aq20", "ruins" }, MAP_RUINS_OF_AHN_QIRAJ,
+              "extra tank for Kurinnaxx swaps and Rajaxx waves; Moam, Ayamiss and Ossirian favor ranged",
+              { { 20, { 3, 5, 3 } } } },
             { "Onyxia", "Onyxia", { "onyxia", "ony" }, MAP_ONYXIAS_LAIR,
               "only ranged can hit her in the air",
               { { 10, { 2, 2, 1 } }, { 25, { 3, 5, 3 } }, { 40, { 4, 10, 4 } } } },
-            // Molten Core: Garr, Golemagg and Majordomo need extra tanks for their adds, and
-            // Ragnaros knocks melee back into the lava.
             { "Molten Core", "MoltenCore", { "mc", "moltencore", "molten" }, MAP_MOLTEN_CORE,
               "extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava",
               { { 40, { 5, 11, 8 } } } },
+            { "Blackwing Lair", "BlackwingLair", { "bwl", "blackwinglair" }, MAP_BLACKWING_LAIR,
+              "five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing",
+              { { 40, { 5, 13, 7 } } } },
+            { "Temple of Ahn'Qiraj", "TempleOfAhnQiraj", { "aq40", "temple" }, MAP_AHN_QIRAJ_TEMPLE,
+              "tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee",
+              { { 40, { 5, 12, 7 } } } },
+            { "Naxxramas", "Naxxramas", { "naxx", "naxxramas" }, MAP_NAXXRAMAS,
+              "extra tanks for Patchwerk, Thaddius and the Horsemen; Heigan and Sapphiron favor ranged",
+              { { 10, { 2, 2, 2 } }, { 25, { 3, 5, 5 } }, { 40, { 6, 12, 6 } } } },
+            // The Burning Crusade
+            { "Karazhan", "Karazhan", { "kara", "karazhan" }, MAP_KARAZHAN,
+              "third healer for Prince and Nightbane; Aran and Prince punish melee",
+              { { 10, { 2, 3, 2 } } } },
+            { "Zul'Aman", "ZulAman", { "za", "zulaman" }, MAP_ZUL_AMAN,
+              "Nalorakk tank swap and Halazzi split; Akil'zon and Zul'jin's Whirlwind punish melee",
+              { { 10, { 2, 3, 2 } } } },
+            { "Gruul's Lair", "GruulsLair", { "gruul", "gruulslair" }, MAP_GRUULS_LAIR,
+              "three tanks for Maulgar's council; Whirlwind and Shatter punish melee",
+              { { 25, { 3, 7, 4 } } } },
+            { "Magtheridon's Lair", "MagtheridonsLair", { "mag", "magtheridon" }, MAP_MAGTHERIDONS_LAIR,
+              "three tanks to split the five Channelers, each with its own healer",
+              { { 25, { 3, 7, 5 } } } },
+            { "Serpentshrine Cavern", "SerpentshrineCavern", { "ssc", "serpentshrine" }, MAP_COILFANG_SERPENTSHRINE_CAVERN,
+              "four tanks for Karathress and his guards; Lurker and Leotheras punish melee",
+              { { 25, { 4, 7, 4 } } } },
+            { "Tempest Keep", "TempestKeep", { "tk", "tempestkeep" }, MAP_TEMPEST_KEEP,
+              "tanks for Al'ar and Kael'thas's advisors; Flamestrike punishes stacked melee",
+              { { 25, { 3, 7, 5 } } } },
+            { "Hyjal Summit", "HyjalSummit", { "hyjal", "mh" }, MAP_THE_BATTLE_FOR_MOUNT_HYJAL,
+              "third tank for trash waves, Infernals and Doomguards; Archimonde punishes melee",
+              { { 25, { 3, 7, 5 } } } },
+            { "Black Temple", "BlackTemple", { "bt", "blacktemple" }, MAP_BLACK_TEMPLE,
+              "three tanks for Bloodboil, Shahraz, the Council and Illidan's Flames; Illidan punishes melee",
+              { { 25, { 3, 7, 4 } } } },
+            { "Sunwell Plateau", "SunwellPlateau", { "swp", "sunwell" }, MAP_THE_SUNWELL,
+              "hardest healing tier; M'uru needs three tanks and Darkness pushes melee out",
+              { { 25, { 3, 8, 4 } } } },
+            // Wrath of the Lich King (Naxxramas and Onyxia are above)
+            { "Obsidian Sanctum", "ObsidianSanctum", { "os", "obsidian", "sartharion" }, MAP_THE_OBSIDIAN_SANCTUM,
+              "fire walls and lava waves sweep the melee; the drakes need an off-tank",
+              { { 10, { 2, 2, 1 } }, { 25, { 2, 5, 5 } } } },
+            { "Eye of Eternity", "EyeOfEternity", { "eoe", "malygos" }, MAP_THE_EYE_OF_ETERNITY,
+              "ranged kill the Scions in phase 2 while tanks hold the Nexus Lords",
+              { { 10, { 2, 2, 2 } }, { 25, { 2, 5, 5 } } } },
+            { "Vault of Archavon", "VaultOfArchavon", { "voa", "vault", "archavon" }, MAP_VAULT_OF_ARCHAVON,
+              "Emalon's Lightning Nova punishes melee; Koralon and Toravon need tank swaps",
+              { { 10, { 2, 2, 2 } }, { 25, { 2, 5, 5 } } } },
+            { "Ulduar", "Ulduar", { "uld", "ulduar" }, MAP_ULDUAR,
+              "Iron Council needs extra tanks; Mimiron, XT and Vezax punish melee; heavy raid damage",
+              { { 10, { 2, 3, 1 } }, { 25, { 3, 6, 4 } } } },
+            { "Trial of the Crusader", "TrialOfTheCrusader", { "toc", "totc", "crusader" }, MAP_TRIAL_OF_THE_CRUSADER,
+              "Anub'arak's Burrowers need off-tanks; Champions and Leeching Swarm burst the raid",
+              { { 10, { 2, 2, 2 } }, { 25, { 3, 6, 4 } } } },
+            { "Icecrown Citadel", "IcecrownCitadel", { "icc", "icecrown" }, MAP_ICECROWN_CITADEL,
+              "Sindragosa, Marrowgar and the Lich King punish melee; Valithria and Putricide need healing",
+              { { 10, { 2, 3, 1 } }, { 25, { 2, 6, 5 } } } },
+            { "Ruby Sanctum", "RubySanctum", { "rs", "ruby", "halion" }, MAP_THE_RUBY_SANCTUM,
+              "Halion splits the raid: melee in the Twilight realm, ranged in the Physical realm",
+              { { 10, { 2, 3, 1 } }, { 25, { 2, 6, 6 } } } },
         };
 
         for (EncounterLineup& e : encounters)
@@ -232,10 +295,26 @@ public:
             { "dismiss",   HandleDismiss,    SEC_PLAYER, Console::No },
             { "debug",     HandleDebug,      SEC_GAMEMASTER, Console::No },
             { "telemetry", HandleTelemetry,  SEC_GAMEMASTER, Console::No },
+            { "raids",     HandleRaids,      SEC_PLAYER, Console::No },
             { "version",   HandleVersion,    SEC_PLAYER, Console::No }
         };
         static ChatCommandTable commandTable = { { "botraid", botRaidTable } };
         return commandTable;
+    }
+
+    // Lists the raid lineups and what to type for each.
+    static bool HandleRaids(ChatHandler* handler)
+    {
+        handler->SendSysMessage("Raid lineups (tanks/healers/melee/ranged). Used inside the raid, or with .botraid assemble <raid> [size]:");
+        for (auto const& e : BotRaidConfigData::instance()->encounters) {
+            std::string lineups;
+            for (auto const& [size, q] : e.quotas)
+                lineups += (lineups.empty() ? "" : ", ") + std::to_string(size) + "-man " + std::to_string(q.tanks) + "/" +
+                    std::to_string(q.healers) + "/" + std::to_string(q.melee) + "/" +
+                    std::to_string((int)size - q.tanks - q.healers - q.melee);
+            handler->PSendSysMessage("  {} ({}): {}", e.name, e.aliases.front(), lineups);
+        }
+        return true;
     }
 
     static bool HandleVersion(ChatHandler* handler)
@@ -452,7 +531,7 @@ public:
             uint32 size = std::stoul(arg1);
             return ExecuteAssemble(handler, 0, 0, false, size);
         } catch (...) {
-            handler->SendSysMessage("Invalid syntax. Example: .botraid assemble 40 or .botraid assemble 60-67 40");
+            handler->SendSysMessage("Invalid syntax. Example: .botraid assemble 40, .botraid assemble 60-67 40 or .botraid assemble mc (see .botraid raids)");
             return true;
         }
     }
