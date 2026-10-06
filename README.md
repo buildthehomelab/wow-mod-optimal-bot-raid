@@ -28,6 +28,7 @@ Category: Bots
 - At level 60, 70 and 80 you only draft bots of your own level.
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
 - **Raid lineups:** every raid now has its own lineup. Assemble inside the raid, or type its short name anywhere, for example **.botraid assemble mc**, **.botraid assemble bwl** or **.botraid assemble icc 25**. Each one brings the extra tanks and healers that raid needs and fewer melee where the bosses punish them. Type **.botraid raids** for the list.
+- **Raid groups are sorted for you.** After assembling, tanks go in group 1, then melee, hunters, casters and healers each get their own groups. Shamans are spread one per group, melee groups first, so Windfury and the other totems reach the people who need them. Type **.botraid sort** to sort again at any time (raid leader or assistant).
 
 ---
 
@@ -113,7 +114,16 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 **What it does:**
 * Lists every raid lineup with the name to type and its tanks/healers/melee/ranged per size. See [Raid Lineups](#raid-lineups).
 
-### 5. Check Module Version
+### 5. Sort the Raid into Groups
+**Syntax:** `.botraid sort`  
+*(Raid leader or assistant; also runs automatically after `.botraid assemble` unless `OptimalBotRaid.SortGroups = 0`)*  
+**What it does:**
+* Puts tanks in group 1, then fills the next groups with melee, hunters, casters and healers in that order, so party-only effects (totems, Prayer of Healing, Vampiric Embrace, Blood Pact) land on the players who use them.
+* Places shamans first, one per group, because totems only reach their own group and don't depend on spec. Melee groups get them first (Windfury, Strength of Earth), then hunters, casters (Wrath of Air) and healers (Mana Spring). A shaman of the group's own kind is picked where possible (Enhancement for melee, Elemental for casters, Restoration for healers).
+* Sorts human players too. Offline members keep their slots.
+* Lists the new groups in chat.
+
+### 6. Check Module Version
 **Syntax:** `.botraid version`  
 **What it does:**
 * Prints the C++ compilation date and time to verify the binary mapped against your AzerothCore environment.
