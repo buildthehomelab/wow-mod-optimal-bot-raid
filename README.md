@@ -27,6 +27,7 @@ Category: Bots
 - Bots are drafted around your level and never more than 2 levels above you. You can ask for a range, for example **.botraid assemble 55-58 10**.
 - At level 60, 70 and 80 you only draft bots of your own level.
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
+- **Onyxia lineup:** assembling inside Onyxia's Lair, or typing **.botraid assemble onyxia 40** (or 10, 25) anywhere, drafts a ranged-heavy raid, since only ranged can hit Onyxia while she's flying. Works for the 10/25-man and the 40-man version.
 
 ---
 
@@ -79,7 +80,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 ### 1. Assemble a Group or Raid
 **Syntax:** `.botraid assemble [<min-max>] <size>`  
 **Supported Sizes:** 5, 10, 15, 20, 25, 40  
-**Examples:** `.botraid assemble 10` | `.botraid assemble 60-67 40`  
+**Examples:** `.botraid assemble 10` | `.botraid assemble 60-67 40` | `.botraid assemble onyxia 40`  
 **What it does:**
 * Evaluates your current group (and any human friends currently with you).
 * Calculates missing roles based on strict Ranged-to-Melee bias quotas to prevent melee cleave deaths.
@@ -139,6 +140,19 @@ The algorithm strictly enforces the following quotas to ensure boss survivabilit
 | **25-man** | 2 | 5 | 6 | 12 |
 | **40-man (Vanilla <= Lvl 60)** | 4 | 10 | 10 | 16 |
 | **40-man (WotLK > Lvl 60)** | 3 | 8 | 10 | 19 |
+
+### Onyxia's Lair Lineups
+Used instead of the table above when the leader assembles inside Onyxia's Lair (map 249), or
+anywhere with `.botraid assemble onyxia <10|25|40>` (`ony` works too). Onyxia's air phase
+(65% to 40% health) is out of melee reach, so these draft as much ranged as the raid can carry.
+The extra tank picks up the Onyxian Lair Guards (10/25) and whelp waves (40). Other sizes fall
+back to the standard lineup. Configurable under `OptimalBotRaid.Quota.Onyxia.*`.
+
+| Onyxia | Tanks | Healers | Melee (Max) | Ranged |
+| :--- | :--- | :--- | :--- | :--- |
+| **10-man** | 2 | 2 | 1 | 5 |
+| **25-man** | 3 | 5 | 3 | 14 |
+| **40-man (individual-progression)** | 4 | 10 | 4 | 22 |
 
 ---
 
