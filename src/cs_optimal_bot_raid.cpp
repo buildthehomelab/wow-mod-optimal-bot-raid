@@ -65,6 +65,7 @@ struct BotRaidConfigData {
 
     int32 maxLevelAbovePlayer;
     bool sameLevelAtCaps;
+    bool raidBotLevel;
     bool sortGroups;
 
     struct Quota { int tanks; int healers; int melee; };
@@ -76,8 +77,13 @@ struct BotRaidConfigData {
         std::string configKey;             // OptimalBotRaid.Quota.<configKey>.<size>.*
         std::vector<std::string> aliases;  // lower case
         uint32 mapId;
+        uint32 level;                      // bot level: 60 vanilla, 70 TBC, 80 WotLK
         std::string reason;                // why this lineup, shown to the player
         std::map<uint32, Quota> quotas;    // by raid size
+
+        // Every 40-man raid is a vanilla one, including the 40-man Onyxia and Naxxramas
+        // that share a map with their level 80 versions.
+        uint32 LevelFor(uint32 size) const { return size == 40 ? 60 : level; }
     };
     std::vector<EncounterLineup> encounters;
 
@@ -129,6 +135,7 @@ struct BotRaidConfigData {
 
         maxLevelAbovePlayer = LoadAndValidateInt("OptimalBotRaid.MaxLevelAbovePlayer", 2, 0, 80);
         sameLevelAtCaps     = sConfigMgr->GetOption<bool>("OptimalBotRaid.SameLevelAtCaps", true);
+        raidBotLevel        = sConfigMgr->GetOption<bool>("OptimalBotRaid.RaidBotLevel", true);
         sortGroups          = sConfigMgr->GetOption<bool>("OptimalBotRaid.SortGroups", true);
 
         const char* clsMap[12] = {"", "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "DK", "Shaman", "Mage", "Warlock", "", "Druid"};
@@ -169,78 +176,79 @@ struct BotRaidConfigData {
 
 
         // Defaults (tanks, healers, melee max); ranged fills the rest. Sources and reasoning are
-        // in the README. Shared maps (Onyxia, Naxxramas) key their WotLK and 40-man versions by size.
+        // in the README. Shared maps (Onyxia, Naxxramas) key their WotLK and 40-man versions by size;
+        // their level is 80, and LevelFor() makes the 40-man versions 60.
         encounters = {
             // Vanilla
-            { "Zul'Gurub", "ZulGurub", { "zg", "zulgurub" }, MAP_ZUL_GURUB,
+            { "Zul'Gurub", "ZulGurub", { "zg", "zulgurub" }, MAP_ZUL_GURUB, 60,
               "Hakkar mind-controls tanks and Thekal splits three ways; Venoxis and Arlokk punish melee",
               { { 20, { 3, 6, 3 } } } },
-            { "Ruins of Ahn'Qiraj", "RuinsOfAhnQiraj", { "aq20", "ruins" }, MAP_RUINS_OF_AHN_QIRAJ,
+            { "Ruins of Ahn'Qiraj", "RuinsOfAhnQiraj", { "aq20", "ruins" }, MAP_RUINS_OF_AHN_QIRAJ, 60,
               "extra tank for Kurinnaxx swaps and Rajaxx waves; Moam, Ayamiss and Ossirian favor ranged",
               { { 20, { 3, 5, 3 } } } },
-            { "Onyxia", "Onyxia", { "onyxia", "ony" }, MAP_ONYXIAS_LAIR,
+            { "Onyxia", "Onyxia", { "onyxia", "ony" }, MAP_ONYXIAS_LAIR, 80,
               "only ranged can hit her in the air",
               { { 10, { 2, 2, 1 } }, { 25, { 3, 5, 3 } }, { 40, { 4, 10, 4 } } } },
-            { "Molten Core", "MoltenCore", { "mc", "moltencore", "molten" }, MAP_MOLTEN_CORE,
+            { "Molten Core", "MoltenCore", { "mc", "moltencore", "molten" }, MAP_MOLTEN_CORE, 60,
               "extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava",
               { { 40, { 5, 11, 8 } } } },
-            { "Blackwing Lair", "BlackwingLair", { "bwl", "blackwinglair" }, MAP_BLACKWING_LAIR,
+            { "Blackwing Lair", "BlackwingLair", { "bwl", "blackwinglair" }, MAP_BLACKWING_LAIR, 60,
               "five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing",
               { { 40, { 5, 13, 7 } } } },
-            { "Temple of Ahn'Qiraj", "TempleOfAhnQiraj", { "aq40", "temple" }, MAP_AHN_QIRAJ_TEMPLE,
+            { "Temple of Ahn'Qiraj", "TempleOfAhnQiraj", { "aq40", "temple" }, MAP_AHN_QIRAJ_TEMPLE, 60,
               "tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee",
               { { 40, { 5, 12, 7 } } } },
-            { "Naxxramas", "Naxxramas", { "naxx", "naxxramas" }, MAP_NAXXRAMAS,
+            { "Naxxramas", "Naxxramas", { "naxx", "naxxramas" }, MAP_NAXXRAMAS, 80,
               "extra tanks for Patchwerk, Thaddius and the Horsemen; Heigan and Sapphiron favor ranged",
               { { 10, { 2, 2, 2 } }, { 25, { 3, 5, 5 } }, { 40, { 6, 12, 6 } } } },
             // The Burning Crusade
-            { "Karazhan", "Karazhan", { "kara", "karazhan" }, MAP_KARAZHAN,
+            { "Karazhan", "Karazhan", { "kara", "karazhan" }, MAP_KARAZHAN, 70,
               "third healer for Prince and Nightbane; Aran and Prince punish melee",
               { { 10, { 2, 3, 2 } } } },
-            { "Zul'Aman", "ZulAman", { "za", "zulaman" }, MAP_ZUL_AMAN,
+            { "Zul'Aman", "ZulAman", { "za", "zulaman" }, MAP_ZUL_AMAN, 70,
               "Nalorakk tank swap and Halazzi split; Akil'zon and Zul'jin's Whirlwind punish melee",
               { { 10, { 2, 3, 2 } } } },
-            { "Gruul's Lair", "GruulsLair", { "gruul", "gruulslair" }, MAP_GRUULS_LAIR,
+            { "Gruul's Lair", "GruulsLair", { "gruul", "gruulslair" }, MAP_GRUULS_LAIR, 70,
               "three tanks for Maulgar's council; Whirlwind and Shatter punish melee",
               { { 25, { 3, 7, 4 } } } },
-            { "Magtheridon's Lair", "MagtheridonsLair", { "mag", "magtheridon" }, MAP_MAGTHERIDONS_LAIR,
+            { "Magtheridon's Lair", "MagtheridonsLair", { "mag", "magtheridon" }, MAP_MAGTHERIDONS_LAIR, 70,
               "three tanks to split the five Channelers, each with its own healer",
               { { 25, { 3, 7, 5 } } } },
-            { "Serpentshrine Cavern", "SerpentshrineCavern", { "ssc", "serpentshrine" }, MAP_COILFANG_SERPENTSHRINE_CAVERN,
+            { "Serpentshrine Cavern", "SerpentshrineCavern", { "ssc", "serpentshrine" }, MAP_COILFANG_SERPENTSHRINE_CAVERN, 70,
               "four tanks for Karathress and his guards; Lurker and Leotheras punish melee",
               { { 25, { 4, 7, 4 } } } },
-            { "Tempest Keep", "TempestKeep", { "tk", "tempestkeep" }, MAP_TEMPEST_KEEP,
+            { "Tempest Keep", "TempestKeep", { "tk", "tempestkeep" }, MAP_TEMPEST_KEEP, 70,
               "tanks for Al'ar and Kael'thas's advisors; Flamestrike punishes stacked melee",
               { { 25, { 3, 7, 5 } } } },
-            { "Hyjal Summit", "HyjalSummit", { "hyjal", "mh" }, MAP_THE_BATTLE_FOR_MOUNT_HYJAL,
+            { "Hyjal Summit", "HyjalSummit", { "hyjal", "mh" }, MAP_THE_BATTLE_FOR_MOUNT_HYJAL, 70,
               "third tank for trash waves, Infernals and Doomguards; Archimonde punishes melee",
               { { 25, { 3, 7, 5 } } } },
-            { "Black Temple", "BlackTemple", { "bt", "blacktemple" }, MAP_BLACK_TEMPLE,
+            { "Black Temple", "BlackTemple", { "bt", "blacktemple" }, MAP_BLACK_TEMPLE, 70,
               "three tanks for Bloodboil, Shahraz, the Council and Illidan's Flames; Illidan punishes melee",
               { { 25, { 3, 7, 4 } } } },
-            { "Sunwell Plateau", "SunwellPlateau", { "swp", "sunwell" }, MAP_THE_SUNWELL,
+            { "Sunwell Plateau", "SunwellPlateau", { "swp", "sunwell" }, MAP_THE_SUNWELL, 70,
               "hardest healing tier; M'uru needs three tanks and Darkness pushes melee out",
               { { 25, { 3, 8, 4 } } } },
             // Wrath of the Lich King (Naxxramas and Onyxia are above)
-            { "Obsidian Sanctum", "ObsidianSanctum", { "os", "obsidian", "sartharion" }, MAP_THE_OBSIDIAN_SANCTUM,
+            { "Obsidian Sanctum", "ObsidianSanctum", { "os", "obsidian", "sartharion" }, MAP_THE_OBSIDIAN_SANCTUM, 80,
               "fire walls and lava waves sweep the melee; the drakes need an off-tank",
               { { 10, { 2, 2, 1 } }, { 25, { 2, 5, 5 } } } },
-            { "Eye of Eternity", "EyeOfEternity", { "eoe", "malygos" }, MAP_THE_EYE_OF_ETERNITY,
+            { "Eye of Eternity", "EyeOfEternity", { "eoe", "malygos" }, MAP_THE_EYE_OF_ETERNITY, 80,
               "ranged kill the Scions in phase 2 while tanks hold the Nexus Lords",
               { { 10, { 2, 2, 2 } }, { 25, { 2, 5, 5 } } } },
-            { "Vault of Archavon", "VaultOfArchavon", { "voa", "vault", "archavon" }, MAP_VAULT_OF_ARCHAVON,
+            { "Vault of Archavon", "VaultOfArchavon", { "voa", "vault", "archavon" }, MAP_VAULT_OF_ARCHAVON, 80,
               "Emalon's Lightning Nova punishes melee; Koralon and Toravon need tank swaps",
               { { 10, { 2, 2, 2 } }, { 25, { 2, 5, 5 } } } },
-            { "Ulduar", "Ulduar", { "uld", "ulduar" }, MAP_ULDUAR,
+            { "Ulduar", "Ulduar", { "uld", "ulduar" }, MAP_ULDUAR, 80,
               "Iron Council needs extra tanks; Mimiron, XT and Vezax punish melee; heavy raid damage",
               { { 10, { 2, 3, 1 } }, { 25, { 3, 6, 4 } } } },
-            { "Trial of the Crusader", "TrialOfTheCrusader", { "toc", "totc", "crusader" }, MAP_TRIAL_OF_THE_CRUSADER,
+            { "Trial of the Crusader", "TrialOfTheCrusader", { "toc", "totc", "crusader" }, MAP_TRIAL_OF_THE_CRUSADER, 80,
               "Anub'arak's Burrowers need off-tanks; Champions and Leeching Swarm burst the raid",
               { { 10, { 2, 2, 2 } }, { 25, { 3, 6, 4 } } } },
-            { "Icecrown Citadel", "IcecrownCitadel", { "icc", "icecrown" }, MAP_ICECROWN_CITADEL,
+            { "Icecrown Citadel", "IcecrownCitadel", { "icc", "icecrown" }, MAP_ICECROWN_CITADEL, 80,
               "Sindragosa, Marrowgar and the Lich King punish melee; Valithria and Putricide need healing",
               { { 10, { 2, 3, 1 } }, { 25, { 2, 6, 5 } } } },
-            { "Ruby Sanctum", "RubySanctum", { "rs", "ruby", "halion" }, MAP_THE_RUBY_SANCTUM,
+            { "Ruby Sanctum", "RubySanctum", { "rs", "ruby", "halion" }, MAP_THE_RUBY_SANCTUM, 80,
               "Halion splits the raid: melee in the Twilight realm, ranged in the Physical realm",
               { { 10, { 2, 3, 1 } }, { 25, { 2, 6, 6 } } } },
         };
@@ -311,11 +319,11 @@ public:
     // Lists the raid lineups and what to type for each.
     static bool HandleRaids(ChatHandler* handler)
     {
-        handler->SendSysMessage("Raid lineups (tanks/healers/melee/ranged). Used inside the raid, or with .botraid assemble <raid> [size]:");
+        handler->SendSysMessage("Raid lineups (bot level, tanks/healers/melee/ranged). Used inside the raid, or with .botraid assemble <raid> [size]:");
         for (auto const& e : BotRaidConfigData::instance()->encounters) {
             std::string lineups;
             for (auto const& [size, q] : e.quotas)
-                lineups += (lineups.empty() ? "" : ", ") + std::to_string(size) + "-man " + std::to_string(q.tanks) + "/" +
+                lineups += (lineups.empty() ? "" : ", ") + std::to_string(size) + "-man L" + std::to_string(e.LevelFor(size)) + " " + std::to_string(q.tanks) + "/" +
                     std::to_string(q.healers) + "/" + std::to_string(q.melee) + "/" +
                     std::to_string((int)size - q.tanks - q.healers - q.melee);
             handler->PSendSysMessage("  {} ({}): {}", e.name, e.aliases.front(), lineups);
@@ -568,7 +576,26 @@ public:
         // At 60, 70 and 80 players only draft bots of exactly their level.
         bool atLevelCap = !isGM && cfg->sameLevelAtCaps && (pLevel == 60 || pLevel == 70 || pLevel == 80);
 
-        if (atLevelCap) {
+        // Raid lineup when asked for, or when assembling inside that raid.
+        bool const askedForEncounter = encounter != nullptr;
+        if (!encounter)
+            encounter = cfg->FindEncounter(player->GetMapId());
+
+        // Raids only get bots of the raid's level: 60 classic, 70 TBC, 80 WotLK. This holds
+        // even when the raid has no lineup for the asked size.
+        uint32 raidLevel = (encounter && cfg->raidBotLevel) ? encounter->LevelFor(size) : 0;
+        std::string raidName = encounter ? encounter->name : "";
+
+        if (raidLevel) {
+            if (raidLevel > levelCap) {
+                handler->PSendSysMessage("{} needs level {} bots, and you can only draft bots up to level {}.", raidName, raidLevel, levelCap);
+                return true;
+            }
+            if (hasCustomRange && (reqMin != raidLevel || reqMax != raidLevel))
+                handler->PSendSysMessage("{} only takes level {} bots; ignoring the level range.", raidName, raidLevel);
+            reqMin = reqMax = raidLevel;
+            atLevelCap = true; // exact level, no lower-level fill-ins
+        } else if (atLevelCap) {
             if (hasCustomRange && (reqMin != pLevel || reqMax != pLevel))
                 handler->PSendSysMessage("At level {} you can only draft level {} bots.", pLevel, pLevel);
             reqMin = reqMax = pLevel;
@@ -616,14 +643,10 @@ public:
         else if (size == 15) qIdx = 2;
         else if (size == 20) qIdx = 3;
         else if (size == 25) qIdx = 4;
-        else if (size == 40) qIdx = (pLevel <= 60) ? 5 : 6;
+        else if (size == 40) qIdx = ((raidLevel ? raidLevel : pLevel) <= 60) ? 5 : 6;
 
         BotRaidConfigData::Quota q = cfg->quotas[qIdx];
 
-        // Raid lineup when asked for, or when assembling inside that raid.
-        bool const askedForEncounter = encounter != nullptr;
-        if (!encounter)
-            encounter = cfg->FindEncounter(player->GetMapId());
         BotRaidConfigData::Quota const* lineup = nullptr;
         if (encounter) {
             auto it = encounter->quotas.find(size);
@@ -762,7 +785,17 @@ public:
         }
 
         if (pool.size() < (size_t)botsToDraft) {
-            if (relaxed && currentMin < reqMin) {
+            if (reqMin == reqMax && pool.empty()) {
+                if (raidLevel)
+                    handler->PSendSysMessage("No idle level {} bots found for {}. Nobody was invited.", reqMin, raidName);
+                else
+                    handler->PSendSysMessage("No idle level {} bots found. Nobody was invited.", reqMin);
+            } else if (reqMin == reqMax) {
+                if (raidLevel)
+                    handler->PSendSysMessage("Not enough idle level {} bots for {}: found {}, need {}. Nobody was invited.", reqMin, raidName, pool.size(), botsToDraft);
+                else
+                    handler->PSendSysMessage("Not enough idle level {} bots: found {}, need {}. Nobody was invited.", reqMin, pool.size(), botsToDraft);
+            } else if (relaxed && currentMin < reqMin) {
                 handler->PSendSysMessage("Not enough eligible idle bots found! Found {}. Needed {}. (Relaxed minimum level down to {})", pool.size(), botsToDraft, currentMin);
             } else {
                 handler->PSendSysMessage("Not enough eligible idle bots found! Found {}. Needed {}.", pool.size(), botsToDraft);
@@ -856,10 +889,18 @@ public:
             return false;
         };
 
-        for (int i = 0; i < reqTanks; i++) DraftBestBot(ROLE_TANK);
-        for (int i = 0; i < reqHealers; i++) DraftBestBot(ROLE_HEALER);
-        for (int i = 0; i < reqMelee; i++) DraftBestBot(ROLE_MELEE);
-        for (int i = 0; i < reqRanged; i++) DraftBestBot(ROLE_RANGED);
+        // Roles nobody could fill get filled with other roles below; tell the player.
+        int missing[ROLE_UNKNOWN] = {};
+        for (int i = 0; i < reqTanks; i++) if (!DraftBestBot(ROLE_TANK)) missing[ROLE_TANK]++;
+        for (int i = 0; i < reqHealers; i++) if (!DraftBestBot(ROLE_HEALER)) missing[ROLE_HEALER]++;
+        for (int i = 0; i < reqMelee; i++) if (!DraftBestBot(ROLE_MELEE)) missing[ROLE_MELEE]++;
+        for (int i = 0; i < reqRanged; i++) if (!DraftBestBot(ROLE_RANGED)) missing[ROLE_RANGED]++;
+
+        static char const* roleNames[ROLE_UNKNOWN] = { "tanks", "healers", "melee", "ranged" };
+        for (int r = 0; r < ROLE_UNKNOWN; ++r)
+            if (missing[r])
+                handler->PSendSysMessage("Not enough {}{}: {} short, filled with other roles.", roleNames[r],
+                    reqMin == reqMax ? " at level " + std::to_string(reqMin) : std::string(), missing[r]);
 
         while ((int)draftedBots.size() < botsToDraft && !pool.empty()) {
             if (!DraftBestBot(ROLE_RANGED) && !DraftBestBot(ROLE_MELEE) && 
