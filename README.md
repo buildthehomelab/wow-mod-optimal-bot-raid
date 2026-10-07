@@ -14,6 +14,7 @@ Tired of manually drafting, whispering, and grouping bots to ensure you have the
 >
 > * Players can't draft bots more than `OptimalBotRaid.MaxLevelAbovePlayer` levels above themselves (default 2), or past the end of their 60/70/80 bracket. Custom ranges are clamped; GMs are exempt.
 > * At level 60, 70 and 80 players only draft bots of exactly their level (`OptimalBotRaid.SameLevelAtCaps`), with no lower-level fill-ins.
+> * Raids only get bots of the raid's level (`OptimalBotRaid.RaidBotLevel`): 60 for classic raids and the 40-man Onyxia and Naxxramas, 70 for TBC, 80 for WotLK. If there aren't enough idle bots at that level, nobody is invited and the player is told.
 > * Only random bots are drafted, never another player's alt bots, and bots queued for LFG/battlegrounds or inside an instance are skipped.
 > * `.botraid dismiss` only releases the bots `.botraid assemble` drafted for you. Bots you invited yourself and your alt bots stay in the group.
 > * Dismissed random bots are restocked and repaired, not re-randomized, so they keep their gear and talents.
@@ -27,6 +28,7 @@ Category: Bots
 - Type **.botraid assemble 10** to fill your group with bots picked for the right tanks, healers and raid buffs. They join you right away, wherever you are. Sizes 5, 10, 15, 20, 25 and 40 are supported.
 - Bots are drafted around your level and never more than 2 levels above you. You can ask for a range, for example **.botraid assemble 55-58 10**.
 - At level 60, 70 and 80 you only draft bots of your own level.
+- **Raids get bots of the raid's level.** Classic raids only invite level 60 bots, TBC raids level 70 and WotLK raids level 80, whatever your own level. This applies to **.botraid assemble mc** and friends, and to assembling inside a raid. If there aren't enough idle bots of that level, you're told how many were found and nobody is invited. If a role (tanks, healers, melee, ranged) runs short, you're told that too.
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
 - **Raid lineups:** every raid now has its own lineup. Assemble inside the raid, or type its short name anywhere, for example **.botraid assemble mc**, **.botraid assemble bwl** or **.botraid assemble icc 25**. Each one brings the extra tanks and healers that raid needs and fewer melee where the bosses punish them. Type **.botraid raids** for the list.
 - **Raid groups are sorted for you.** After assembling, tanks go in group 1, then melee, hunters, casters and healers each get their own groups. Shamans are spread one per group, melee groups first, so Windfury and the other totems reach the people who need them. Type **.botraid sort** to sort again at any time (raid leader or assistant).
@@ -88,6 +90,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 * Evaluates your current group (and any human friends currently with you).
 * Calculates missing roles based on strict Ranged-to-Melee bias quotas to prevent melee cleave deaths.
 * Scans the server safely for idle, out-of-combat bots matching your level bracket. If a custom bracket is not provided, defaults to 4 levels below the leader up to `OptimalBotRaid.MaxLevelAbovePlayer` levels above (custom brackets are clamped to the same cap; GMs are exempt). Only random bots that aren't queued for LFG/battlegrounds or inside an instance are considered.
+* **Raid level:** for a raid lineup (`.botraid assemble <raid>`, or any assemble inside a raid) only bots of the raid's level are drafted: 60 for vanilla raids and the 40-man Onyxia and Naxxramas, 70 for TBC, 80 for WotLK (`OptimalBotRaid.RaidBotLevel`). Level ranges are ignored there and there is no relaxation. The leader still has to be within `MaxLevelAbovePlayer` of that level unless they are a GM. If too few bots are found, the command says how many and invites nobody; roles that run short are reported and filled with other roles.
 * **Intelligent Relaxation:** If there are not enough bots in the desired bracket, it will dynamically and gradually relax the minimum level limit down (as far as level 10) to fulfill the draft, while explicitly notifying you of the adjusted range.
 * Scores them based on their Normalized GearScore and the missing unique buffs they bring to your current comp.
 * Invites them, converts the group to a raid, teleports them to your exact coordinates/instance, and resets their AI to follow you.
@@ -114,7 +117,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 ### 4. List Raid Lineups
 **Syntax:** `.botraid raids`  
 **What it does:**
-* Lists every raid lineup with the name to type and its tanks/healers/melee/ranged per size. See [Raid Lineups](#raid-lineups).
+* Lists every raid lineup with the name to type, the bot level, and its tanks/healers/melee/ranged per size. See [Raid Lineups](#raid-lineups).
 
 ### 5. Sort the Raid into Groups
 **Syntax:** `.botraid sort`  
@@ -173,7 +176,8 @@ Used instead of the table above when the leader assembles inside the raid, or an
 `.botraid assemble <raid> [size]` (`.botraid raids` lists them in game). Sizes without a lineup
 fall back to the standard one, and a raid with a single size doesn't need the size. Configurable
 under `OptimalBotRaid.Quota.<Raid>.<size>.*`. Onyxia's Lair and Naxxramas share their map between
-the WotLK 10/25 versions and mod-individual-progression's 40-man versions; the size picks which.
+the WotLK 10/25 versions and mod-individual-progression's 40-man versions; the size picks which
+lineup and the bot level (40-man = level 60 bots, 10/25 = level 80).
 
 The numbers start from the tank and healer counts raid guides recommend, then lean toward ranged
 where bosses punish melee (bots react late to knockbacks, cleaves and whirlwinds) and add a
