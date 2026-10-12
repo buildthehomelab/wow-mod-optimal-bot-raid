@@ -26,6 +26,7 @@
 #include "LFGMgr.h"
 #include "DBCStores.h"
 #include "InstanceSaveMgr.h"
+#include "World.h"
 #include <vector>
 #include <string>
 #include <cmath>
@@ -728,6 +729,8 @@ public:
             botsToDraft = slotsAvailable; 
         }
 
+        bool crossFaction = sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP);
+
         std::vector<ObjectGuid> potentialBots;
         {
             std::shared_lock<std::shared_mutex> lock(*HashMapHolder<Player>::GetLock());
@@ -736,7 +739,9 @@ public:
             for (auto const& pair : players) {
                 Player* bot = pair.second;
                 if (!bot || bot == player || bot->GetGroup() || !bot->IsAlive() || bot->IsInCombat() || bot->IsInFlight() || bot->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST)) continue;
-                if (!PlayerbotsMgr::instance().GetPlayerbotAI(bot) || bot->GetTeamId() != player->GetTeamId()) continue;
+                if (!PlayerbotsMgr::instance().GetPlayerbotAI(bot)) continue;
+                // Other-faction bots only when the core allows mixed groups (AllowTwoSide.Interaction.Group).
+                if (!crossFaction && bot->GetTeamId() != player->GetTeamId()) continue;
                 // Only random bots: never pull another player's alt bots.
                 if (!sRandomPlayerbotMgr.IsRandomBot(bot)) continue;
                 // Leave bots alone that are queued for LFG/BGs or sitting inside an instance.
