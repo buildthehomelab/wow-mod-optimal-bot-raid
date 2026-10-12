@@ -16,6 +16,7 @@ Tired of manually drafting, whispering, and grouping bots to ensure you have the
 > * At level 60, 70 and 80 players only draft bots of exactly their level (`OptimalBotRaid.SameLevelAtCaps`), with no lower-level fill-ins.
 > * Raids only get bots of the raid's level (`OptimalBotRaid.RaidBotLevel`): 60 for classic raids and the 40-man Onyxia and Naxxramas, 70 for TBC, 80 for WotLK. If there aren't enough idle bots at that level, nobody is invited and the player is told.
 > * Only random bots are drafted, never another player's alt bots, and bots queued for LFG/battlegrounds or inside an instance are skipped.
+> * Bots of both factions are drafted when the core allows mixed groups (`AllowTwoSide.Interaction.Group = 1`). Otherwise only your own faction, as before.
 > * `.botraid dismiss` only releases the bots `.botraid assemble` drafted for you. Bots you invited yourself and your alt bots stay in the group.
 > * Dismissed random bots are restocked and repaired, not re-randomized, so they keep their gear and talents.
 > * `.botraid telemetry` and `.botraid debug` are GM-only.
@@ -28,6 +29,7 @@ Category: Bots
 - Type **.botraid assemble 10** to fill your group with bots picked for the right tanks, healers and raid buffs. They join you right away, wherever you are. Sizes 5, 10, 15, 20, 25 and 40 are supported.
 - Bots are drafted around your level and never more than 2 levels above you. You can ask for a range, for example **.botraid assemble 55-58 10**.
 - At level 60, 70 and 80 you only draft bots of your own level.
+- **Both factions.** On a cross-faction realm, raids are filled with the best Horde and Alliance bots, so paladins and shamans can end up in the same raid.
 - **Raids get bots of the raid's level.** Classic raids only invite level 60 bots, TBC raids level 70 and WotLK raids level 80, whatever your own level. This applies to **.botraid assemble mc** and friends, and to assembling inside a raid. If there aren't enough idle bots of that level, you're told how many were found and nobody is invited. If a role (tanks, healers, melee, ranged) runs short, you're told that too.
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
 - **Raid lineups:** every raid now has its own lineup. Assemble inside the raid, or type its short name anywhere, for example **.botraid assemble mc**, **.botraid assemble bwl** or **.botraid assemble icc 25**. Each one brings the extra tanks and healers that raid needs and fewer melee where the bosses punish them. Type **.botraid raids** for the list.
