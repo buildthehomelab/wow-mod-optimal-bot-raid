@@ -34,6 +34,10 @@ Category: Bots
 - Type **.botraid dismiss** to send the bots you drafted home. Bots you invited yourself stay.
 - **Raid lineups:** every raid now has its own lineup. Assemble inside the raid, or type its short name anywhere, for example **.botraid assemble mc**, **.botraid assemble bwl** or **.botraid assemble icc 25**. Each one brings the extra tanks and healers that raid needs and fewer melee where the bosses punish them. Type **.botraid raids** for the list.
 - **Hunters where a raid needs them.** Molten Core, Blackwing Lair, the Temple of Ahn'Qiraj and 40-man Naxxramas always bring at least 2 hunters, for the bosses whose Frenzy needs Tranquilizing Shot. Hunters already in your group count. If there aren't enough idle hunters, you're told how many are short.
+- **Warlocks and mages in every classic 40-man.** Molten Core, Blackwing Lair, the Temple of Ahn'Qiraj, 40-man Naxxramas and 40-man Onyxia always bring at least 3 warlocks (one per curse, plus banishes) and 5 mages (decursing, sheep and AoE). Warlocks and mages already in your group count, and you're told if there aren't enough idle ones.
+- **Naxxramas 40 brings 8 tanks**, two for each of the Four Horsemen, up from 6. The two extra slots come out of the ranged.
+- **Onyxia 40 brings 3 tanks**, down from 4: she only needs a main tank and an off-tank, and the freed slot goes to ranged.
+- **No bear tanks in raids.** For raids of 10 and up, only warriors, paladins and death knights are invited as tanks. Bear druid bots used to be invited as melee and then tanked anyway; now they are left out of raids, and feral druid bots in the melee slots are always cats. A 5-man group can still get a bear as its tank. A bear bot that is already in your group stays, but the raid still brings its full number of other tanks.
 - **Raid groups are sorted for you.** After assembling, tanks go in group 1, then melee, hunters, casters and healers each get their own groups. Shamans are spread one per group, melee groups first, so Windfury and the other totems reach the people who need them. Type **.botraid sort** to sort again at any time (raid leader or assistant).
 - **Reset your bots' raid lockouts.** If bots are locked to a different copy of a raid and can't follow you in, type **.botraid unbind mc** (or any raid's short name), or **.botraid unbind all**. Inside a raid, **.botraid unbind** clears that raid. Only the random bots in your group are reset, never your own lockout.
 
@@ -120,7 +124,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 ### 4. List Raid Lineups
 **Syntax:** `.botraid raids`  
 **What it does:**
-* Lists every raid lineup with the name to type, the bot level, its tanks/healers/melee/ranged per size, and the fewest hunters it brings. See [Raid Lineups](#raid-lineups).
+* Lists every raid lineup with the name to type, the bot level, its tanks/healers/melee/ranged per size, and the fewest hunters, warlocks and mages it brings. See [Raid Lineups](#raid-lineups).
 
 ### 5. Sort the Raid into Groups
 **Syntax:** `.botraid sort`  
@@ -193,21 +197,34 @@ slots, hunters already in the group count, and the best-scoring hunters are draf
 other ranged. Set it per lineup with `OptimalBotRaid.Quota.<Raid>.<size>.HuntersMin` (0 = no
 minimum); the standard quotas take the same key.
 
+The classic 40-man lineups also bring a minimum of 3 warlocks (Curse of the Elements, Shadow and
+Recklessness, banishes in Molten Core, tanking Vek'lor at the Twin Emperors) and 5 mages
+(decursing on Lucifron, Gehennas, Shazzrah, Chromaggus, Noth and Sapphiron, sheep, AoE). They work
+like the hunter minimum, with `WarlocksMin` and `MagesMin`. The three minimums share the ranged
+slots: hunters are fitted first, then warlocks, then mages.
+
+Sources for the vanilla numbers: the Icy Veins and Warcraft Tavern raid guides, warcraft.wiki.gg
+boss pages and 40-man templates on barrens.chat. The Four Horsemen set Naxxramas at 8 tanks (two
+per Horseman); Onyxia needs one main tank and an off-tank. Guides run 12-13 melee in Blackwing
+Lair and the Temple of Ahn'Qiraj; the lineups keep fewer on purpose, for the reason above.
+
 #### Vanilla
 
-| Raid | Command | Size | Tanks | Healers | Melee (Max) | Ranged | Hunters (Min) | Why |
+The last column is the fewest hunters / warlocks / mages among the ranged.
+
+| Raid | Command | Size | Tanks | Healers | Melee (Max) | Ranged | Hunters / Warlocks / Mages (Min) | Why |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Zul'Gurub** | `zg` / `zulgurub` | 20 | 3 | 6 | 3 | 8 | 0 | Hakkar mind-controls tanks and Thekal splits three ways; Venoxis and Arlokk punish melee |
-| **Ruins of Ahn'Qiraj** | `aq20` / `ruins` | 20 | 3 | 5 | 3 | 9 | 0 | Extra tank for Kurinnaxx swaps and Rajaxx waves; Moam, Ayamiss and Ossirian favor ranged |
-| **Onyxia** | `onyxia` / `ony` | 10 | 2 | 2 | 1 | 5 | 0 | Only ranged can hit her in the air |
-|  |  | 25 | 3 | 5 | 3 | 14 | 0 |  |
-|  |  | 40 | 4 | 10 | 4 | 22 | 0 |  |
-| **Molten Core** | `mc` / `moltencore` / `molten` | 40 | 5 | 11 | 8 | 16 | 2 | Extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava; hunters for Magmadar's Frenzy |
-| **Blackwing Lair** | `bwl` / `blackwinglair` | 40 | 5 | 13 | 7 | 15 | 2 | Five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing; hunters for Flamegor's and Chromaggus' Frenzy |
-| **Temple of Ahn'Qiraj** | `aq40` / `temple` | 40 | 5 | 12 | 7 | 16 | 2 | Tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee; hunters for Huhuran's Frenzy |
-| **Naxxramas** | `naxx` / `naxxramas` | 10 | 2 | 2 | 2 | 4 | 0 | Extra tanks for Patchwerk, Thaddius and the Horsemen; Heigan and Sapphiron favor ranged |
-|  |  | 25 | 3 | 5 | 5 | 12 | 0 |  |
-|  |  | 40 | 6 | 12 | 6 | 16 | 2 |  |
+| **Zul'Gurub** | `zg` / `zulgurub` | 20 | 3 | 6 | 3 | 8 | 0 / 0 / 0 | Hakkar mind-controls tanks and Thekal splits three ways; Venoxis and Arlokk punish melee |
+| **Ruins of Ahn'Qiraj** | `aq20` / `ruins` | 20 | 3 | 5 | 3 | 9 | 0 / 0 / 0 | Extra tank for Kurinnaxx swaps and Rajaxx waves; Moam, Ayamiss and Ossirian favor ranged |
+| **Onyxia** | `onyxia` / `ony` | 10 | 2 | 2 | 1 | 5 | 0 / 0 / 0 | Only ranged can hit her in the air |
+|  |  | 25 | 3 | 5 | 3 | 14 | 0 / 0 / 0 |  |
+|  |  | 40 | 3 | 10 | 4 | 23 | 0 / 3 / 5 | One main tank and an off-tank; the third picks up whelps |
+| **Molten Core** | `mc` / `moltencore` / `molten` | 40 | 5 | 11 | 8 | 16 | 2 / 3 / 5 | Extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava; hunters for Magmadar's Frenzy |
+| **Blackwing Lair** | `bwl` / `blackwinglair` | 40 | 5 | 13 | 7 | 15 | 2 / 3 / 5 | Five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing; hunters for Flamegor's and Chromaggus' Frenzy |
+| **Temple of Ahn'Qiraj** | `aq40` / `temple` | 40 | 5 | 12 | 7 | 16 | 2 / 3 / 5 | Tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee; hunters for Huhuran's Frenzy |
+| **Naxxramas** | `naxx` / `naxxramas` | 10 | 2 | 2 | 2 | 4 | 0 / 0 / 0 | Extra tanks for Patchwerk, Thaddius and the Horsemen; Heigan and Sapphiron favor ranged |
+|  |  | 25 | 3 | 5 | 5 | 12 | 0 / 0 / 0 |  |
+|  |  | 40 | 8 | 12 | 6 | 14 | 2 / 3 / 5 | Two tanks for each of the Four Horsemen |
 
 #### The Burning Crusade
 
