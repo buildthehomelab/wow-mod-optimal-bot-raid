@@ -48,7 +48,8 @@ using namespace Acore::ChatCommands;
 // Global Telemetry State
 static bool s_telemetryEnabled = false;
 
-// Thick Hide (rank 3): mod-playerbots runs a feral druid that has it as a bear tank, the rest as cats.
+// Thick Hide (rank 3): mod-playerbots runs a feral druid bot that has it as a bear tank, the rest
+// as cats. Says nothing about how a human plays.
 constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
 
 // Bots drafted by .botraid assemble, per leader. Dismiss only releases these.
@@ -440,7 +441,7 @@ public:
         }
         
         if (PlayerbotsMgr::instance().GetPlayerbotAI(bot)) {
-            if (PlayerbotAI::IsTank(bot)) return (cls == CLASS_WARRIOR ? 2 : (cls == CLASS_PALADIN ? 1 : 0));
+            if (PlayerbotAI::IsTank(bot)) return (cls == CLASS_WARRIOR ? 2 : ((cls == CLASS_PALADIN || cls == CLASS_DRUID) ? 1 : 0));
             if (PlayerbotAI::IsHeal(bot)) return (cls == CLASS_PALADIN ? 0 : (cls == CLASS_PRIEST ? 1 : 2));
             if (PlayerbotAI::IsRanged(bot) && cls == CLASS_SHAMAN) return 0;
             if (!PlayerbotAI::IsRanged(bot) && cls == CLASS_SHAMAN) return 1;
@@ -490,7 +491,10 @@ public:
             case CLASS_DRUID:
                 if (lvl >= 1) buffs |= BUFF_5_PCT_STATS;
                 if (tree == 0) { role = ROLE_RANGED; if (lvl >= 50) buffs |= BUFF_13_MAGIC_DMG; if (lvl >= 40) buffs |= BUFF_SPELL_HASTE; }
-                else if (tree == 1) { role = bot->HasAura(SPELL_DRUID_THICK_HIDE) ? ROLE_TANK : ROLE_MELEE; if (lvl >= 40) buffs |= BUFF_CRIT; }
+                else if (tree == 1) {
+                    bool bearBot = bot->HasAura(SPELL_DRUID_THICK_HIDE) && PlayerbotsMgr::instance().GetPlayerbotAI(bot);
+                    role = bearBot ? ROLE_TANK : ROLE_MELEE; if (lvl >= 40) buffs |= BUFF_CRIT;
+                }
                 else { role = ROLE_HEALER; }
                 break;
             case CLASS_PRIEST:
@@ -695,11 +699,20 @@ public:
         uint32 currentRaidBuffs = 0;
         uint32 currentMembers = 0;
 
+        // Bears stay out of raids: warriors, paladins and death knights tank those.
+        bool noBearTanks = size > 5 && !cfg->bearTanksInRaids;
+
         auto EvalPlayer = [&](Player* p) {
             currentMembers++;
             BotRole role; float comp; uint32 buffs;
             MapBotProfile(p, GetBotSpec(p, p->getClass()), role, comp, buffs);
             currentRaidBuffs |= buffs;
+
+            // A bear bot that is already in the group doesn't use up one of the raid's tank slots.
+            if (noBearTanks && role == ROLE_TANK && p->getClass() == CLASS_DRUID) {
+                role = ROLE_MELEE;
+                handler->PSendSysMessage("{} is a bear tank and isn't counted as one of this raid's tanks.", p->GetName());
+            }
             
             if (isTele) {
                 teleLog << "  Group Member: " << p->GetName() << " | Role: " << GetRoleName(role) 
@@ -796,8 +809,7 @@ public:
                 cand.gearScore = std::max(1.0f, (float)bot->GetAverageItemLevel()); 
                 
                 MapBotProfile(bot, GetBotSpec(bot, bot->getClass()), cand.role, cand.aiCompetency, cand.providedBuffs);
-                // Bears stay out of raids: warriors, paladins and death knights tank those.
-                if (size > 5 && !cfg->bearTanksInRaids && cand.role == ROLE_TANK && bot->getClass() == CLASS_DRUID) continue;
+                if (noBearTanks && cand.role == ROLE_TANK && bot->getClass() == CLASS_DRUID) continue;
                 if (cand.role != ROLE_UNKNOWN) allCandidates.push_back(cand);
             }
         }
