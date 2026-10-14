@@ -144,10 +144,13 @@ OptimalBotRaid.Quota.40WotLK.MeleeMax = 10
 # and melee. Defaults come from raid guides, then shifted toward ranged and an
 # extra healer where bots struggle (see the README for sources).
 #
-# HuntersMin is the fewest hunters to bring, taken out of the ranged slots, for
-# bosses whose Frenzy needs Tranquilizing Shot. Hunters already in your group
-# count. Any lineup or quota takes it (OptimalBotRaid.Quota.<...>.HuntersMin);
-# it is 0 where it isn't listed.
+# HuntersMin, WarlocksMin and MagesMin are the fewest of that class to bring,
+# taken out of the ranged slots: hunters for bosses whose Frenzy needs
+# Tranquilizing Shot, warlocks for the three curses and banishes, mages for
+# decursing, sheep and AoE. Members already in your group count. Together they
+# can't be more than the ranged slots; hunters are fitted first, then warlocks,
+# then mages. Any lineup or quota takes them
+# (OptimalBotRaid.Quota.<...>.HuntersMin and so on); they are 0 where not listed.
 
 # --- Vanilla ---
 
@@ -169,59 +172,71 @@ OptimalBotRaid.Quota.RuinsOfAhnQiraj.20.MeleeMax = 3
 #    Only ranged can hit her in the air.
 #    Default 10: 2 tanks, 2 healers, 1 melee, 5 ranged
 #    Default 25: 3 tanks, 5 healers, 3 melee, 14 ranged
-#    Default 40: 4 tanks, 10 healers, 4 melee, 22 ranged
+#    Default 40: 3 tanks, 10 healers, 4 melee, 23 ranged (at least 3 warlocks, 5 mages).
+#                One main tank and an off-tank; the third picks up whelps.
 OptimalBotRaid.Quota.Onyxia.10.Tanks = 2
 OptimalBotRaid.Quota.Onyxia.10.Healers = 2
 OptimalBotRaid.Quota.Onyxia.10.MeleeMax = 1
 OptimalBotRaid.Quota.Onyxia.25.Tanks = 3
 OptimalBotRaid.Quota.Onyxia.25.Healers = 5
 OptimalBotRaid.Quota.Onyxia.25.MeleeMax = 3
-OptimalBotRaid.Quota.Onyxia.40.Tanks = 4
+OptimalBotRaid.Quota.Onyxia.40.Tanks = 3
 OptimalBotRaid.Quota.Onyxia.40.Healers = 10
 OptimalBotRaid.Quota.Onyxia.40.MeleeMax = 4
+OptimalBotRaid.Quota.Onyxia.40.WarlocksMin = 3
+OptimalBotRaid.Quota.Onyxia.40.MagesMin = 5
 
 # MOLTEN CORE (.botraid assemble mc)
 #    Extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava.
-#    Hunters for Magmadar's Frenzy.
-#    Default 40: 5 tanks, 11 healers, 8 melee, 16 ranged (at least 2 hunters)
+#    Hunters for Magmadar's Frenzy; warlocks banish, mages decurse and sheep.
+#    Default 40: 5 tanks, 11 healers, 8 melee, 16 ranged (at least 2 hunters, 3 warlocks, 5 mages)
 OptimalBotRaid.Quota.MoltenCore.40.Tanks = 5
 OptimalBotRaid.Quota.MoltenCore.40.Healers = 11
 OptimalBotRaid.Quota.MoltenCore.40.MeleeMax = 8
 OptimalBotRaid.Quota.MoltenCore.40.HuntersMin = 2
+OptimalBotRaid.Quota.MoltenCore.40.WarlocksMin = 3
+OptimalBotRaid.Quota.MoltenCore.40.MagesMin = 5
 
 # BLACKWING LAIR (.botraid assemble bwl)
 #    Five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing.
 #    Hunters for Flamegor's and Chromaggus' Frenzy.
-#    Default 40: 5 tanks, 13 healers, 7 melee, 15 ranged (at least 2 hunters)
+#    Default 40: 5 tanks, 13 healers, 7 melee, 15 ranged (at least 2 hunters, 3 warlocks, 5 mages)
 OptimalBotRaid.Quota.BlackwingLair.40.Tanks = 5
 OptimalBotRaid.Quota.BlackwingLair.40.Healers = 13
 OptimalBotRaid.Quota.BlackwingLair.40.MeleeMax = 7
 OptimalBotRaid.Quota.BlackwingLair.40.HuntersMin = 2
+OptimalBotRaid.Quota.BlackwingLair.40.WarlocksMin = 3
+OptimalBotRaid.Quota.BlackwingLair.40.MagesMin = 5
 
 # TEMPLE OF AHN'QIRAJ (.botraid assemble aq40)
 #    Tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee.
-#    Hunters for Huhuran's Frenzy.
-#    Default 40: 5 tanks, 12 healers, 7 melee, 16 ranged (at least 2 hunters)
+#    Hunters for Huhuran's Frenzy; warlocks tank Vek'lor at the Twin Emperors.
+#    Default 40: 5 tanks, 12 healers, 7 melee, 16 ranged (at least 2 hunters, 3 warlocks, 5 mages)
 OptimalBotRaid.Quota.TempleOfAhnQiraj.40.Tanks = 5
 OptimalBotRaid.Quota.TempleOfAhnQiraj.40.Healers = 12
 OptimalBotRaid.Quota.TempleOfAhnQiraj.40.MeleeMax = 7
 OptimalBotRaid.Quota.TempleOfAhnQiraj.40.HuntersMin = 2
+OptimalBotRaid.Quota.TempleOfAhnQiraj.40.WarlocksMin = 3
+OptimalBotRaid.Quota.TempleOfAhnQiraj.40.MagesMin = 5
 
 # NAXXRAMAS (.botraid assemble naxx <10|25|40>)
 #    Extra tanks for Patchwerk, Thaddius and the Horsemen; Heigan and Sapphiron favor ranged.
 #    Default 10: 2 tanks, 2 healers, 2 melee, 4 ranged
 #    Default 25: 3 tanks, 5 healers, 5 melee, 12 ranged
-#    Default 40: 6 tanks, 12 healers, 6 melee, 16 ranged (at least 2 hunters, for Gluth's Frenzy)
+#    Default 40: 8 tanks, 12 healers, 6 melee, 14 ranged (at least 2 hunters, 3 warlocks, 5 mages).
+#                Two tanks per Horseman; hunters for Gluth's Frenzy; mages decurse on Noth and Sapphiron.
 OptimalBotRaid.Quota.Naxxramas.10.Tanks = 2
 OptimalBotRaid.Quota.Naxxramas.10.Healers = 2
 OptimalBotRaid.Quota.Naxxramas.10.MeleeMax = 2
 OptimalBotRaid.Quota.Naxxramas.25.Tanks = 3
 OptimalBotRaid.Quota.Naxxramas.25.Healers = 5
 OptimalBotRaid.Quota.Naxxramas.25.MeleeMax = 5
-OptimalBotRaid.Quota.Naxxramas.40.Tanks = 6
+OptimalBotRaid.Quota.Naxxramas.40.Tanks = 8
 OptimalBotRaid.Quota.Naxxramas.40.Healers = 12
 OptimalBotRaid.Quota.Naxxramas.40.MeleeMax = 6
 OptimalBotRaid.Quota.Naxxramas.40.HuntersMin = 2
+OptimalBotRaid.Quota.Naxxramas.40.WarlocksMin = 3
+OptimalBotRaid.Quota.Naxxramas.40.MagesMin = 5
 
 # --- The Burning Crusade ---
 
