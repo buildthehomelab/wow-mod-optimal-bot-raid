@@ -48,6 +48,9 @@ using namespace Acore::ChatCommands;
 // Global Telemetry State
 static bool s_telemetryEnabled = false;
 
+// Thick Hide (rank 3): mod-playerbots runs a feral druid that has it as a bear tank, the rest as cats.
+constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
+
 // Bots drafted by .botraid assemble, per leader. Dismiss only releases these.
 static std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> s_draftedBots;
 
@@ -68,6 +71,7 @@ struct BotRaidConfigData {
     bool sameLevelAtCaps;
     bool raidBotLevel;
     bool sortGroups;
+    bool bearTanksInRaids;
 
     // hunters: fewest hunters to bring, taken out of the ranged slots (Tranquilizing Shot bosses).
     struct Quota { int tanks; int healers; int melee; int hunters = 0; };
@@ -139,6 +143,7 @@ struct BotRaidConfigData {
         sameLevelAtCaps     = sConfigMgr->GetOption<bool>("OptimalBotRaid.SameLevelAtCaps", true);
         raidBotLevel        = sConfigMgr->GetOption<bool>("OptimalBotRaid.RaidBotLevel", true);
         sortGroups          = sConfigMgr->GetOption<bool>("OptimalBotRaid.SortGroups", true);
+        bearTanksInRaids    = sConfigMgr->GetOption<bool>("OptimalBotRaid.BearTanksInRaids", false);
 
         const char* clsMap[12] = {"", "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "DK", "Shaman", "Mage", "Warlock", "", "Druid"};
         float defMult[12][3] = {
@@ -485,7 +490,7 @@ public:
             case CLASS_DRUID:
                 if (lvl >= 1) buffs |= BUFF_5_PCT_STATS;
                 if (tree == 0) { role = ROLE_RANGED; if (lvl >= 50) buffs |= BUFF_13_MAGIC_DMG; if (lvl >= 40) buffs |= BUFF_SPELL_HASTE; }
-                else if (tree == 1) { role = ROLE_MELEE; if (lvl >= 40) buffs |= BUFF_CRIT; }
+                else if (tree == 1) { role = bot->HasAura(SPELL_DRUID_THICK_HIDE) ? ROLE_TANK : ROLE_MELEE; if (lvl >= 40) buffs |= BUFF_CRIT; }
                 else { role = ROLE_HEALER; }
                 break;
             case CLASS_PRIEST:
@@ -791,6 +796,8 @@ public:
                 cand.gearScore = std::max(1.0f, (float)bot->GetAverageItemLevel()); 
                 
                 MapBotProfile(bot, GetBotSpec(bot, bot->getClass()), cand.role, cand.aiCompetency, cand.providedBuffs);
+                // Bears stay out of raids: warriors, paladins and death knights tank those.
+                if (size > 5 && !cfg->bearTanksInRaids && cand.role == ROLE_TANK && bot->getClass() == CLASS_DRUID) continue;
                 if (cand.role != ROLE_UNKNOWN) allCandidates.push_back(cand);
             }
         }

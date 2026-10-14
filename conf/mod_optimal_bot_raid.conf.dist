@@ -45,6 +45,16 @@ OptimalBotRaid.RaidBotLevel = 1
 #                 0 - (Disabled)
 OptimalBotRaid.SortGroups = 1
 
+# OptimalBotRaid.BearTanksInRaids
+#    Description: Draft bear druids (feral with Thick Hide, which the bots play
+#                 as tanks) for raids. Off by default: bears tank raids poorly,
+#                 so raids of 10 and up only get warrior, paladin and death
+#                 knight tanks, and cat druids for melee. 5-man groups can
+#                 always get a bear as their tank.
+#    Default:     0 - (Disabled)
+#                 1 - (Enabled)
+OptimalBotRaid.BearTanksInRaids = 0
+
 # ==============================================================================
 # ALGORITHM HEURISTIC WEIGHTS
 # ==============================================================================
