@@ -27,6 +27,7 @@
 #include "DBCStores.h"
 #include "InstanceSaveMgr.h"
 #include "World.h"
+#include "GameTime.h"
 #include <vector>
 #include <string>
 #include <cmath>
@@ -40,6 +41,7 @@
 #include <ctime>
 #include <shared_mutex>
 #include <map>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include "Log.h"
@@ -53,8 +55,15 @@ static bool s_telemetryEnabled = false;
 // as cats. Says nothing about how a human plays.
 constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
 
-// Bots drafted by .botraid assemble, per leader. Dismiss only releases these.
+// Bots drafted by .botraid assemble, per leader. Dismiss only releases these. The group hooks
+// that prune it can run on map threads, so every access takes the lock.
 static std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> s_draftedBots;
+static std::mutex s_draftedBotsLock;
+
+// When each player last moved bots with .botraid assemble / dismiss. Only the commands touch
+// these, and they run on the world thread.
+static std::unordered_map<ObjectGuid, Seconds> s_lastAssemble;
+static std::unordered_map<ObjectGuid, Seconds> s_lastDismiss;
 
 // ==============================================================================
 // CONFIGURATION CACHE & EXPLICIT BOUNDARY VALIDATION
@@ -74,6 +83,7 @@ struct BotRaidConfigData {
     bool raidBotLevel;
     bool sortGroups;
     bool bearTanksInRaids;
+    uint32 commandCooldown;
 
     // hunters, warlocks, mages: fewest of that class to bring, taken out of the ranged slots.
     struct Quota { int tanks; int healers; int melee; int hunters = 0; int warlocks = 0; int mages = 0; };
@@ -165,6 +175,7 @@ struct BotRaidConfigData {
         raidBotLevel        = sConfigMgr->GetOption<bool>("OptimalBotRaid.RaidBotLevel", true);
         sortGroups          = sConfigMgr->GetOption<bool>("OptimalBotRaid.SortGroups", true);
         bearTanksInRaids    = sConfigMgr->GetOption<bool>("OptimalBotRaid.BearTanksInRaids", false);
+        commandCooldown     = LoadAndValidateInt("OptimalBotRaid.CommandCooldown", 30, 0, 3600);
 
         const char* clsMap[12] = {"", "Warrior", "Paladin", "Hunter", "Rogue", "Priest", "DK", "Shaman", "Mage", "Warlock", "", "Druid"};
         float defMult[12][3] = {
@@ -307,6 +318,41 @@ public:
     OptimalBotRaidConfigScript() : WorldScript("OptimalBotRaidConfigScript") {}
     void OnAfterConfigLoad(bool /*reload*/) override {
         BotRaidConfigData::instance()->Load();
+    }
+};
+
+// Keeps s_draftedBots to bots still in a group: a bot that leaves, or a leader who leaves,
+// drops out of it, and a disband clears the whole group. Battleground and battlefield groups
+// are skipped: players sit in those next to their own group, which they still lead.
+class OptimalBotRaidGroupScript : public GroupScript {
+public:
+    OptimalBotRaidGroupScript() : GroupScript("OptimalBotRaidGroupScript", { GROUPHOOK_ON_REMOVE_MEMBER, GROUPHOOK_ON_DISBAND }) {}
+
+    void OnRemoveMember(Group* group, ObjectGuid guid, RemoveMethod /*method*/, ObjectGuid /*kicker*/, char const* /*reason*/) override {
+        if (group->isBGGroup() || group->isBFGroup())
+            return;
+        Forget({ guid });
+    }
+
+    void OnDisband(Group* group) override {
+        if (group->isBGGroup() || group->isBFGroup())
+            return;
+        std::vector<ObjectGuid> members;
+        for (Group::MemberSlot const& slot : group->GetMemberSlots())
+            members.push_back(slot.guid);
+        Forget(members);
+    }
+
+private:
+    static void Forget(std::vector<ObjectGuid> const& guids) {
+        std::lock_guard<std::mutex> lock(s_draftedBotsLock);
+        for (ObjectGuid const& guid : guids)
+            s_draftedBots.erase(guid);
+        for (auto itr = s_draftedBots.begin(); itr != s_draftedBots.end();) {
+            for (ObjectGuid const& guid : guids)
+                itr->second.erase(guid);
+            itr = itr->second.empty() ? s_draftedBots.erase(itr) : std::next(itr);
+        }
     }
 };
 
@@ -547,6 +593,35 @@ public:
         }
     }
 
+    // True, after telling the player how long is left, while their last use of the command is
+    // under OptimalBotRaid.CommandCooldown seconds ago. GMs never wait.
+    static bool OnCooldown(ChatHandler* handler, std::unordered_map<ObjectGuid, Seconds> const& lastUse, char const* command)
+    {
+        uint32 cooldown = BotRaidConfigData::instance()->commandCooldown;
+        if (!cooldown || handler->GetSession()->GetSecurity() >= SEC_GAMEMASTER)
+            return false;
+
+        auto itr = lastUse.find(handler->GetSession()->GetPlayer()->GetGUID());
+        if (itr == lastUse.end())
+            return false;
+
+        Seconds left = itr->second + Seconds(cooldown) - GameTime::GetGameTime();
+        if (left <= 0s)
+            return false;
+
+        handler->PSendSysMessage("You can use .botraid {} again in {} second{}.", command, left.count(), left.count() == 1 ? "" : "s");
+        return true;
+    }
+
+    static void StartCooldown(Player* player, std::unordered_map<ObjectGuid, Seconds>& lastUse)
+    {
+        Seconds now = GameTime::GetGameTime();
+        Seconds cooldown(BotRaidConfigData::instance()->commandCooldown);
+        // Only players still cooling down stay in the map.
+        std::erase_if(lastUse, [&](auto const& entry) { return entry.second + cooldown <= now; });
+        lastUse[player->GetGUID()] = now;
+    }
+
     static bool HandleAssemble(ChatHandler* handler, std::string arg1, Optional<uint32> optSize)
     {
         // Raid lineup (.botraid assemble onyxia 40, .botraid assemble mc), for assembling
@@ -602,6 +677,9 @@ public:
         BotRaidConfigData::EncounterLineup const* encounter = nullptr)
     {
         Player* player = handler->GetSession()->GetPlayer();
+
+        if (OnCooldown(handler, s_lastAssemble, "assemble"))
+            return true;
         
         if (!player->IsAlive()) {
             handler->SendSysMessage("You cannot draft mercenaries while dead.");
@@ -1019,11 +1097,16 @@ public:
         
         if (size > 5 && !group->isRaidGroup()) group->ConvertToRaid();
 
+        bool addedAny = false;
         for (Player* bot : draftedBots) {
             if (group->IsFull()) break;
             
             if (group->AddMember(bot)) {
-                s_draftedBots[player->GetGUID()].insert(bot->GetGUID());
+                addedAny = true;
+                {
+                    std::lock_guard<std::mutex> lock(s_draftedBotsLock);
+                    s_draftedBots[player->GetGUID()].insert(bot->GetGUID());
+                }
                 if (bot->GetMapId() != player->GetMapId() || !bot->IsWithinDistInMap(player, 40.0f)) {
                     bot->CombatStop(true);
                     bot->TeleportTo(player->GetMapId(), player->GetPositionX(), player->GetPositionY(), 
@@ -1031,6 +1114,9 @@ public:
                 }
             }
         }
+
+        if (addedAny)
+            StartCooldown(player, s_lastAssemble);
 
         if (isTele) {
             teleLog << "\n--- POST-ASSEMBLY BOT STATES (FUNCTIONAL VERIFICATION) ---\n";
@@ -1352,6 +1438,9 @@ public:
 
     static bool ExecuteDismiss(ChatHandler* handler, bool freeroam)
     {
+        if (OnCooldown(handler, s_lastDismiss, "dismiss"))
+            return true;
+
         Player* player = handler->GetSession()->GetPlayer();
         Group* initialGroup = player->GetGroup();
 
@@ -1373,11 +1462,16 @@ public:
         }
 
         // Only the bots this leader drafted; manually invited bots and alt bots stay.
+        // Taken out under the lock and released before the bots leave the group, whose hooks
+        // take it again.
         std::unordered_set<ObjectGuid> drafted;
-        auto draftedItr = s_draftedBots.find(player->GetGUID());
-        if (draftedItr != s_draftedBots.end()) {
-            drafted = std::move(draftedItr->second);
-            s_draftedBots.erase(draftedItr);
+        {
+            std::lock_guard<std::mutex> lock(s_draftedBotsLock);
+            auto draftedItr = s_draftedBots.find(player->GetGUID());
+            if (draftedItr != s_draftedBots.end()) {
+                drafted = std::move(draftedItr->second);
+                s_draftedBots.erase(draftedItr);
+            }
         }
 
         std::vector<ObjectGuid> botsToRemove;
@@ -1397,6 +1491,8 @@ public:
             handler->SendSysMessage("You have no drafted mercenaries in your group.");
             return true;
         }
+
+        StartCooldown(player, s_lastDismiss);
 
         if (isTele) teleLog << "--- EXECUTING TEARDOWN SEQUENCE ---\n";
 
@@ -1502,5 +1598,6 @@ public:
 
 void Addcs_optimal_bot_raidScripts() {
     new cs_optimal_bot_raid();
-    new OptimalBotRaidConfigScript(); 
+    new OptimalBotRaidConfigScript();
+    new OptimalBotRaidGroupScript();
 }

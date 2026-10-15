@@ -14,6 +14,16 @@
 #    Default:     2
 OptimalBotRaid.MaxLevelAbovePlayer = 2
 
+# OptimalBotRaid.CommandCooldown
+#    Description: Seconds a player must wait between two ".botraid assemble"
+#                 commands, and between two ".botraid dismiss" commands. Each
+#                 command has its own timer, which only starts when bots were
+#                 actually drafted or dismissed, so a typo or a failed draft
+#                 doesn't count. GMs are exempt.
+#    Range:       0 to 3600 (0 - no cooldown)
+#    Default:     30
+OptimalBotRaid.CommandCooldown = 30
+
 # OptimalBotRaid.SameLevelAtCaps
 #    Description: At level 60, 70 and 80 players only draft bots of exactly their
 #                 level (no lower-level fill-ins). The cap above also never reaches
