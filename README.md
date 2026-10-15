@@ -109,6 +109,7 @@ Once compiled and your server is running, log into any character (Level 1-80) an
 * Severs the AI master link and halts physics/momentum natively via `bot->StopMoving()` and `MotionMaster->Clear()`.
 * If `freeroam` is specified, the script cuts the bots loose right in their current spot without natively teleporting them back to their home Innkeeper bind.
 * **Defeats Asynchronous AI Race Conditions:** Uses a 1000ms `AddTimedEvent()` delayed lambda callback. This intentionally bypasses the notorious `ResetAiAction` race condition inherent to the Playerbot core, ensuring mercenaries accurately decouple from the raid leader without freezing into un-targetable statues.
+* Assemble and dismiss each have a per-player cooldown (`OptimalBotRaid.CommandCooldown`, 30 seconds by default) that starts when bots were actually drafted or dismissed. GMs are exempt.
 * **Executes a Split Strategy Cleanse:**
   * **System RandomBots** are factory refreshed (restocked, repaired), keeping their gear and talents.
   * **Offline Player Alts** receive manual strategy stripping (`-follow`, `-dps assist`, etc.) to protect their customized gear.
