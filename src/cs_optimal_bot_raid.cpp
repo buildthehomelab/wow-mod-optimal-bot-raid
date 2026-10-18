@@ -69,6 +69,8 @@ static std::unordered_map<ObjectGuid, Seconds> s_lastDismiss;
 // CONFIGURATION CACHE & EXPLICIT BOUNDARY VALIDATION
 // ==============================================================================
 
+enum BotRole { ROLE_TANK, ROLE_HEALER, ROLE_MELEE, ROLE_RANGED, ROLE_UNKNOWN };
+
 struct BotRaidConfigData {
     float weightGS;
     float weightBuff;
@@ -85,25 +87,54 @@ struct BotRaidConfigData {
     bool bearTanksInRaids;
     uint32 commandCooldown;
 
-    // hunters, warlocks, mages: fewest of that class to bring, taken out of the ranged slots.
-    struct Quota { int tanks; int healers; int melee; int hunters = 0; int warlocks = 0; int mages = 0; };
-
-    // The classes a quota can ask a minimum of, in the order they claim ranged slots: hunters for
-    // Tranquilizing Shot bosses, warlocks for the curses and banishes, mages for decursing,
-    // sheep and AoE.
-    struct ClassMinimum { uint8 cls; int Quota::*count; char const* configKey; char const* singular; char const* plural; };
-    static constexpr ClassMinimum CLASS_MINIMUMS[] = {
-        { CLASS_HUNTER,  &Quota::hunters,  "HuntersMin",  "hunter",  "hunters"  },
-        { CLASS_WARLOCK, &Quota::warlocks, "WarlocksMin", "warlock", "warlocks" },
-        { CLASS_MAGE,    &Quota::mages,    "MagesMin",    "mage",    "mages"    },
+    // The class minimums (hunters to mages) are the fewest of that class to bring in that role's
+    // slots; the class caps (paladinsMax, shamansMax) the most outside the tank slots, -1 for no
+    // cap.
+    struct Quota {
+        int tanks; int healers; int melee;
+        int hunters = 0; int warlocks = 0; int mages = 0;
+        int warriorTanks = 0; int priests = 0; int druidHealers = 0; int rogues = 0; int warriors = 0;
+        int paladinsMax = -1; int shamansMax = -1;
     };
 
-    // "2 hunters, 3 warlocks, 5 mages"; empty without minimums.
-    static std::string DescribeMinimums(Quota const& q) {
-        std::string text;
+    // The classes a quota can ask a minimum of, in the order they claim their role's slots:
+    // warriors tank (the lineups leave tanks to warriors and paladins alike), priests heal and
+    // bring Fear Ward and dispels, druids Innervate and Rebirth, rogues and warriors deal
+    // physical damage (bosses like Chromaggus shrug off most spell schools), hunters for
+    // Tranquilizing Shot bosses, warlocks for the curses and banishes, mages for decursing,
+    // sheep and AoE.
+    struct ClassMinimum { BotRole role; uint8 cls; int Quota::*count; char const* configKey; char const* singular; char const* plural; };
+    static constexpr ClassMinimum CLASS_MINIMUMS[] = {
+        { ROLE_TANK,   CLASS_WARRIOR, &Quota::warriorTanks, "WarriorTanksMin",  "warrior tank",  "warrior tanks"  },
+        { ROLE_HEALER, CLASS_PRIEST,  &Quota::priests,      "PriestsMin",       "priest healer", "priest healers" },
+        { ROLE_HEALER, CLASS_DRUID,   &Quota::druidHealers, "DruidHealersMin",  "druid healer",  "druid healers"  },
+        { ROLE_MELEE,  CLASS_ROGUE,   &Quota::rogues,       "RoguesMin",        "rogue",         "rogues"         },
+        { ROLE_MELEE,  CLASS_WARRIOR, &Quota::warriors,     "MeleeWarriorsMin", "melee warrior", "melee warriors" },
+        { ROLE_RANGED, CLASS_HUNTER,  &Quota::hunters,      "HuntersMin",       "hunter",        "hunters"        },
+        { ROLE_RANGED, CLASS_WARLOCK, &Quota::warlocks,     "WarlocksMin",      "warlock",       "warlocks"       },
+        { ROLE_RANGED, CLASS_MAGE,    &Quota::mages,        "MagesMin",         "mage",          "mages"          },
+    };
+
+    // Classes a quota can cap, so they don't crowd the others out: the bots' scores favor
+    // paladin and shaman healers. Tanks don't count: a paladin tank is as good as a warrior.
+    struct ClassCap { uint8 cls; int Quota::*count; char const* configKey; char const* singular; char const* plural; };
+    static constexpr ClassCap CLASS_CAPS[] = {
+        { CLASS_PALADIN, &Quota::paladinsMax, "PaladinsMax", "paladin", "paladins" },
+        { CLASS_SHAMAN,  &Quota::shamansMax,  "ShamansMax",  "shaman",  "shamans"  },
+    };
+
+    // "at least 5 priest healers, 2 hunters; at most 6 paladins, 6 shamans"; empty without any.
+    static std::string DescribeClassMix(Quota const& q) {
+        std::string least, most;
         for (ClassMinimum const& m : CLASS_MINIMUMS)
             if (int count = q.*m.count)
-                text += (text.empty() ? "" : ", ") + std::to_string(count) + " " + (count == 1 ? m.singular : m.plural);
+                least += (least.empty() ? "" : ", ") + std::to_string(count) + " " + (count == 1 ? m.singular : m.plural);
+        for (ClassCap const& c : CLASS_CAPS)
+            if (int count = q.*c.count; count >= 0)
+                most += (most.empty() ? "" : ", ") + std::to_string(count) + " " + (count == 1 ? c.singular : c.plural);
+        std::string text = least.empty() ? "" : "at least " + least;
+        if (!most.empty())
+            text += (text.empty() ? "" : "; ") + std::string("at most ") + most;
         return text;
     }
     Quota quotas[7]; // Indexes: 0=5, 1=10, 2=15, 3=20, 4=25, 5=40Vanilla, 6=40WotLK
@@ -203,18 +234,29 @@ struct BotRaidConfigData {
                 q.tanks = def.tanks; q.healers = def.healers; q.melee = def.melee;
             }
 
-            // The class minimums share the ranged slots. Only the lineups that need one list its
+            // The class minimums share their role's slots. Only the lineups that need one list its
             // key, so a missing one isn't logged.
-            int ranged = limit - q.tanks - q.healers - q.melee;
+            int room[ROLE_UNKNOWN] = { q.tanks, q.healers, q.melee, limit - q.tanks - q.healers - q.melee };
+            static char const* roleSlots[ROLE_UNKNOWN] = { "tank", "healer", "melee", "ranged" };
             for (ClassMinimum const& m : CLASS_MINIMUMS) {
+                int& left = room[m.role];
                 int32 val = sConfigMgr->GetOption<int32>(prefix + "." + m.configKey, def.*m.count, false);
-                if (val < 0 || val > ranged) {
-                    LOG_ERROR("server.loading", "[OptimalBotRaid] CONFIG ERROR: '{}.{}' value ({}) is out of bounds [0 to {} ranged slots left]. Using {}.",
-                              prefix, m.configKey, val, ranged, std::clamp(val, 0, ranged));
-                    val = std::clamp(val, 0, ranged);
+                if (val < 0 || val > left) {
+                    LOG_ERROR("server.loading", "[OptimalBotRaid] CONFIG ERROR: '{}.{}' value ({}) is out of bounds [0 to {} {} slots left]. Using {}.",
+                              prefix, m.configKey, val, left, roleSlots[m.role], std::clamp(val, 0, left));
+                    val = std::clamp(val, 0, left);
                 }
                 q.*m.count = val;
-                ranged -= val;
+                left -= val;
+            }
+            for (ClassCap const& c : CLASS_CAPS) {
+                int32 val = sConfigMgr->GetOption<int32>(prefix + "." + c.configKey, def.*c.count, false);
+                if (val < -1 || val > limit) {
+                    LOG_ERROR("server.loading", "[OptimalBotRaid] CONFIG ERROR: '{}.{}' value ({}) is out of bounds [-1 (no cap) to {}]. Using {}.",
+                              prefix, c.configKey, val, limit, def.*c.count);
+                    val = def.*c.count;
+                }
+                q.*c.count = val;
             }
             return q;
         };
@@ -228,10 +270,13 @@ struct BotRaidConfigData {
         quotas[6] = LoadQuotaVal("OptimalBotRaid.Quota.40WotLK", { 3, 8, 10 }, 40);
 
 
-        // Defaults (tanks, healers, melee max, then hunters, warlocks and mages min for the vanilla
-        // 40-mans); ranged fills the rest. Sources and reasoning are in the README. Shared maps
-        // (Onyxia, Naxxramas) key their WotLK and 40-man versions by size;
-        // their level is 80, and LevelFor() makes the 40-man versions 60.
+        // Defaults (tanks, healers, melee max; the vanilla 40-mans also set a class mix like a
+        // vanilla raid's: priests and druids healing, rogues and warriors in melee, hunters,
+        // warlocks and mages, at most 6 paladins and 6 shamans outside the tank slots); ranged
+        // fills the rest.
+        // Sources and reasoning are in the README. Shared maps (Onyxia, Naxxramas) key their
+        // WotLK and 40-man versions by size; their level is 80, and LevelFor() makes the
+        // 40-man versions 60.
         encounters = {
             // Vanilla
             { "Zul'Gurub", "ZulGurub", { "zg", "zulgurub" }, MAP_ZUL_GURUB, 60,
@@ -242,19 +287,31 @@ struct BotRaidConfigData {
               { { 20, { 3, 5, 3 } } } },
             { "Onyxia", "Onyxia", { "onyxia", "ony" }, MAP_ONYXIAS_LAIR, 80,
               "only ranged can hit her in the air",
-              { { 10, { 2, 2, 1 } }, { 25, { 3, 5, 3 } }, { 40, { 3, 10, 4, 0, 3, 5 } } } },
+              { { 10, { 2, 2, 1 } }, { 25, { 3, 5, 3 } },
+                { 40, { .tanks = 3, .healers = 10, .melee = 4, .hunters = 3, .warlocks = 3, .mages = 5,
+                        .priests = 4, .druidHealers = 2, .rogues = 2, .warriors = 2,
+                        .paladinsMax = 6, .shamansMax = 6 } } } },
             { "Molten Core", "MoltenCore", { "mc", "moltencore", "molten" }, MAP_MOLTEN_CORE, 60,
               "extra tanks for Garr, Golemagg and Majordomo; Ragnaros knocks melee into the lava; hunters for Magmadar's Frenzy",
-              { { 40, { 5, 11, 8, 2, 3, 5 } } } },
+              { { 40, { .tanks = 5, .healers = 11, .melee = 8, .hunters = 3, .warlocks = 3, .mages = 5,
+                        .priests = 4, .druidHealers = 2, .rogues = 3, .warriors = 3,
+                        .paladinsMax = 6, .shamansMax = 6 } } } },
             { "Blackwing Lair", "BlackwingLair", { "bwl", "blackwinglair" }, MAP_BLACKWING_LAIR, 60,
-              "five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing; hunters for Flamegor's and Chromaggus' Frenzy",
-              { { 40, { 5, 13, 7, 2, 3, 5 } } } },
+              "five tanks for Vaelastrasz and the drakes; Vael and Nefarian need heavy healing; hunters for Flamegor's and Chromaggus' Frenzy; rogues and warriors because Chromaggus shrugs off most spells",
+              { { 40, { .tanks = 5, .healers = 13, .melee = 7, .hunters = 3, .warlocks = 3, .mages = 5,
+                        .priests = 5, .druidHealers = 2, .rogues = 3, .warriors = 3,
+                        .paladinsMax = 6, .shamansMax = 6 } } } },
             { "Temple of Ahn'Qiraj", "TempleOfAhnQiraj", { "aq40", "temple" }, MAP_AHN_QIRAJ_TEMPLE, 60,
               "tanks for the Bug Trio, Sartura and Fankriss adds; Ouro and Huhuran punish melee; hunters for Huhuran's Frenzy",
-              { { 40, { 5, 12, 7, 2, 3, 5 } } } },
+              { { 40, { .tanks = 5, .healers = 12, .melee = 7, .hunters = 3, .warlocks = 3, .mages = 5,
+                        .priests = 5, .druidHealers = 2, .rogues = 3, .warriors = 3,
+                        .paladinsMax = 6, .shamansMax = 6 } } } },
             { "Naxxramas", "Naxxramas", { "naxx", "naxxramas" }, MAP_NAXXRAMAS, 80,
               "extra tanks for Patchwerk, Thaddius and the Horsemen (two each in the 40-man); Heigan and Sapphiron favor ranged",
-              { { 10, { 2, 2, 2 } }, { 25, { 3, 5, 5 } }, { 40, { 8, 12, 6, 2, 3, 5 } } } },
+              { { 10, { 2, 2, 2 } }, { 25, { 3, 5, 5 } },
+                { 40, { .tanks = 8, .healers = 12, .melee = 6, .hunters = 2, .warlocks = 3, .mages = 5,
+                        .priests = 5, .druidHealers = 2, .rogues = 3, .warriors = 2,
+                        .paladinsMax = 6, .shamansMax = 6 } } } },
             // The Burning Crusade
             { "Karazhan", "Karazhan", { "kara", "karazhan" }, MAP_KARAZHAN, 70,
               "third healer for Prince and Nightbane; Aran and Prince punish melee",
@@ -360,7 +417,6 @@ private:
 // CORE ALGORITHM
 // ==============================================================================
 
-enum BotRole { ROLE_TANK, ROLE_HEALER, ROLE_MELEE, ROLE_RANGED, ROLE_UNKNOWN };
 const char* GetRoleName(BotRole r) {
     switch(r) { case ROLE_TANK: return "TANK"; case ROLE_HEALER: return "HEALER"; case ROLE_MELEE: return "MELEE"; case ROLE_RANGED: return "RANGED"; default: return "UNKNOWN"; }
 }
@@ -407,15 +463,15 @@ public:
     // Lists the raid lineups and what to type for each.
     static bool HandleRaids(ChatHandler* handler)
     {
-        handler->SendSysMessage("Raid lineups (bot level, tanks/healers/melee/ranged, classes the ranged always include). Used inside the raid, or with .botraid assemble <raid> [size]:");
+        handler->SendSysMessage("Raid lineups (bot level, tanks/healers/melee/ranged, class mix). Used inside the raid, or with .botraid assemble <raid> [size]:");
         for (auto const& e : BotRaidConfigData::instance()->encounters) {
             std::string lineups;
             for (auto const& [size, q] : e.quotas) {
-                std::string minimums = BotRaidConfigData::DescribeMinimums(q);
+                std::string mix = BotRaidConfigData::DescribeClassMix(q);
                 lineups += (lineups.empty() ? "" : ", ") + std::to_string(size) + "-man L" + std::to_string(e.LevelFor(size)) + " " + std::to_string(q.tanks) + "/" +
                     std::to_string(q.healers) + "/" + std::to_string(q.melee) + "/" +
                     std::to_string((int)size - q.tanks - q.healers - q.melee) +
-                    (minimums.empty() ? "" : " (at least " + minimums + ")");
+                    (mix.empty() ? "" : " (" + mix + ")");
             }
             handler->PSendSysMessage("  {} ({}): {}", e.name, e.aliases.front(), lineups);
         }
@@ -787,10 +843,10 @@ public:
         if (encounter) {
             q = *lineup;
             int ranged = (int)size - q.tanks - q.healers - q.melee;
-            std::string minimums = BotRaidConfigData::DescribeMinimums(q);
+            std::string mix = BotRaidConfigData::DescribeClassMix(q);
             handler->PSendSysMessage("{} lineup: {} tanks, {} healers, {} melee, {} ranged{} ({}).",
                 encounter->name, q.tanks, q.healers, q.melee, ranged,
-                minimums.empty() ? "" : " with at least " + minimums, encounter->reason);
+                mix.empty() ? "" : ", " + mix, encounter->reason);
             if (isTele)
                 teleLog << "Encounter Lineup: " << encounter->name << " " << size << "-man\n\n";
         }
@@ -799,11 +855,14 @@ public:
         int reqHealers = std::min(q.healers, (int)size - reqTanks);
         int reqMelee = std::min(q.melee, (int)size - reqTanks - reqHealers);
         int reqRanged = size - reqTanks - reqHealers - reqMelee;
-        // Class minimums still to draft, in CLASS_MINIMUMS order; part of reqRanged.
+        int* reqOf[ROLE_UNKNOWN] = { &reqTanks, &reqHealers, &reqMelee, &reqRanged };
+        // Class minimums still to draft, in CLASS_MINIMUMS order; part of their role's count.
         constexpr size_t MINIMUMS = std::size(BotRaidConfigData::CLASS_MINIMUMS);
         int reqClass[MINIMUMS];
         for (size_t i = 0; i < MINIMUMS; ++i)
             reqClass[i] = q.*BotRaidConfigData::CLASS_MINIMUMS[i].count;
+        // Members of each class outside the tank slots, in the group and drafted, for the class caps.
+        int classCount[MAX_CLASSES] = {};
 
         uint32 currentRaidBuffs = 0;
         uint32 currentMembers = 0;
@@ -831,10 +890,14 @@ public:
             if (role == ROLE_TANK) reqTanks--;
             else if (role == ROLE_HEALER) reqHealers--;
             else if (role == ROLE_MELEE) reqMelee--;
-            else reqRanged--; 
+            else { role = ROLE_RANGED; reqRanged--; }
 
-            for (size_t i = 0; i < MINIMUMS; ++i)
-                if (p->getClass() == BotRaidConfigData::CLASS_MINIMUMS[i].cls) reqClass[i]--;
+            for (size_t i = 0; i < MINIMUMS; ++i) {
+                auto const& m = BotRaidConfigData::CLASS_MINIMUMS[i];
+                if (p->getClass() == m.cls && role == m.role) reqClass[i]--;
+            }
+            if (role != ROLE_TANK && p->getClass() < MAX_CLASSES)
+                classCount[p->getClass()]++;
         };
 
         if (group) {
@@ -854,7 +917,11 @@ public:
 
         if (isTele) {
             teleLog << "\n--- TARGET QUOTAS & STATE ---\n"
-                    << "Target Draft: " << botsToDraft << " bots (T:" << reqTanks << " H:" << reqHealers << " M:" << reqMelee << " R:" << reqRanged << " of which hunters:" << reqClass[0] << " warlocks:" << reqClass[1] << " mages:" << reqClass[2] << ")\n"
+                    << "Target Draft: " << botsToDraft << " bots (T:" << reqTanks << " H:" << reqHealers << " M:" << reqMelee << " R:" << reqRanged << ")\n"
+                    << "Class Minimums:";
+            for (size_t i = 0; i < MINIMUMS; ++i)
+                teleLog << " " << BotRaidConfigData::CLASS_MINIMUMS[i].configKey << ":" << reqClass[i];
+            teleLog << "\n"
                     << "Initial Matrix Buffs: 0x" << std::hex << currentRaidBuffs << std::dec << "\n\n";
         }
 
@@ -874,17 +941,18 @@ public:
             botsToDraft = slotsAvailable; 
         }
 
-        // The class minimums come out of the ranged slots; a group that is already full of other
-        // ranged has no room for them.
-        int rangedRoom = reqRanged;
+        // The class minimums come out of their role's slots; a group that already fills that role
+        // with other classes has no room for them.
+        int roleRoom[ROLE_UNKNOWN] = { reqTanks, reqHealers, reqMelee, reqRanged };
         for (size_t i = 0; i < MINIMUMS; ++i) {
             auto const& m = BotRaidConfigData::CLASS_MINIMUMS[i];
-            if (reqClass[i] > rangedRoom) {
+            int& room = roleRoom[m.role];
+            if (reqClass[i] > room) {
                 handler->PSendSysMessage("This lineup wants {} more {}, but your group only has room for {}.",
-                    reqClass[i], reqClass[i] == 1 ? m.singular : m.plural, rangedRoom);
-                reqClass[i] = rangedRoom;
+                    reqClass[i], reqClass[i] == 1 ? m.singular : m.plural, room);
+                reqClass[i] = room;
             }
-            rangedRoom -= reqClass[i];
+            room -= reqClass[i];
         }
 
         bool crossFaction = sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP);
@@ -996,8 +1064,20 @@ public:
 
         std::vector<Player*> draftedBots;
         
-        // cls: only draft that class (0 = any class of the role).
-        auto DraftBestBot = [&](BotRole targetRole, uint8 cls = 0) -> bool {
+        // Whether the raid already has as many of this class outside the tank slots as the lineup
+        // caps it at.
+        auto AtCap = [&](uint8 cls) -> bool {
+            for (auto const& c : BotRaidConfigData::CLASS_CAPS)
+                if (c.cls == cls && q.*c.count >= 0 && cls < MAX_CLASSES && classCount[cls] >= q.*c.count)
+                    return true;
+            return false;
+        };
+        // Bots drafted past a class cap because nobody else could take the slot.
+        int overCap[MAX_CLASSES] = {};
+
+        // cls: only draft that class (0 = any class of the role). keepCaps: skip classes at their cap
+        // (tank slots have no caps).
+        auto DraftBestBot = [&](BotRole targetRole, uint8 cls = 0, bool keepCaps = true) -> bool {
             float bestScore = -1.0f; 
             int bestIndex = -1;
             float t_normGS = 0.0f, t_buffScore = 0.0f;
@@ -1008,6 +1088,7 @@ public:
             for (size_t i = 0; i < pool.size(); ++i) {
                 if (pool[i].role != targetRole) continue;
                 if (cls && pool[i].bot->getClass() != cls) continue;
+                if (keepCaps && targetRole != ROLE_TANK && AtCap(pool[i].bot->getClass())) continue;
 
                 uint32 newBuffs = (~currentRaidBuffs & pool[i].providedBuffs);
                 int newBuffCount = 0; 
@@ -1045,6 +1126,11 @@ public:
                             << "      Buff Matrix Trans.: 0x" << std::hex << currentRaidBuffs << " -> 0x" << (currentRaidBuffs | pool[bestIndex].providedBuffs) << std::dec << "\n\n";
                 }
 
+                uint8 draftedClass = pool[bestIndex].bot->getClass();
+                if (targetRole != ROLE_TANK && draftedClass < MAX_CLASSES) {
+                    if (AtCap(draftedClass)) overCap[draftedClass]++;
+                    classCount[draftedClass]++;
+                }
                 draftedBots.push_back(pool[bestIndex].bot);
                 currentRaidBuffs |= pool[bestIndex].providedBuffs; 
                 pool.erase(pool.begin() + bestIndex);
@@ -1055,20 +1141,28 @@ public:
             return false;
         };
 
+        // A class under its cap first; one past it rather than leave the slot to another role.
+        auto DraftRole = [&](BotRole targetRole, uint8 cls = 0) -> bool {
+            return DraftBestBot(targetRole, cls, true) || (targetRole != ROLE_TANK && DraftBestBot(targetRole, cls, false));
+        };
+
+        // Each role takes its class minimums first, then any class for the rest of its slots.
         // Roles nobody could fill get filled with other roles below; tell the player.
         int missing[ROLE_UNKNOWN] = {};
-        for (int i = 0; i < reqTanks; i++) if (!DraftBestBot(ROLE_TANK)) missing[ROLE_TANK]++;
-        for (int i = 0; i < reqHealers; i++) if (!DraftBestBot(ROLE_HEALER)) missing[ROLE_HEALER]++;
-        for (int i = 0; i < reqMelee; i++) if (!DraftBestBot(ROLE_MELEE)) missing[ROLE_MELEE]++;
-        // The lineup's class minimums first, then the rest of the ranged slots with any ranged.
         int missingClass[MINIMUMS] = {};
-        for (size_t c = 0; c < MINIMUMS; ++c) {
-            for (int i = 0; i < reqClass[c]; i++) {
-                if (DraftBestBot(ROLE_RANGED, BotRaidConfigData::CLASS_MINIMUMS[c].cls)) reqRanged--;
-                else missingClass[c]++;
+        for (int r = 0; r < ROLE_UNKNOWN; ++r) {
+            BotRole const role = BotRole(r);
+            for (size_t c = 0; c < MINIMUMS; ++c) {
+                auto const& m = BotRaidConfigData::CLASS_MINIMUMS[c];
+                if (m.role != role)
+                    continue;
+                for (int i = 0; i < reqClass[c]; i++) {
+                    if (DraftRole(role, m.cls)) (*reqOf[r])--;
+                    else missingClass[c]++;
+                }
             }
+            for (int i = 0; i < *reqOf[r]; i++) if (!DraftRole(role)) missing[r]++;
         }
-        for (int i = 0; i < reqRanged; i++) if (!DraftBestBot(ROLE_RANGED)) missing[ROLE_RANGED]++;
 
         static char const* roleNames[ROLE_UNKNOWN] = { "tanks", "healers", "melee", "ranged" };
         for (int r = 0; r < ROLE_UNKNOWN; ++r)
@@ -1076,14 +1170,24 @@ public:
                 handler->PSendSysMessage("Not enough {}{}: {} short, filled with other roles.", roleNames[r],
                     reqMin == reqMax ? " at level " + std::to_string(reqMin) : std::string(), missing[r]);
         for (size_t c = 0; c < MINIMUMS; ++c)
-            if (missingClass[c])
-                handler->PSendSysMessage("Not enough {}{}: {} short, filled with other ranged.", BotRaidConfigData::CLASS_MINIMUMS[c].plural,
-                    reqMin == reqMax ? " at level " + std::to_string(reqMin) : std::string(), missingClass[c]);
+            if (missingClass[c]) {
+                auto const& m = BotRaidConfigData::CLASS_MINIMUMS[c];
+                handler->PSendSysMessage("Not enough {}{}: {} short, filled with other {}.", m.plural,
+                    reqMin == reqMax ? " at level " + std::to_string(reqMin) : std::string(), missingClass[c], roleNames[m.role]);
+            }
 
+        // Any role under the caps before any past them.
         while ((int)draftedBots.size() < botsToDraft && !pool.empty()) {
-            if (!DraftBestBot(ROLE_RANGED) && !DraftBestBot(ROLE_MELEE) && 
-                !DraftBestBot(ROLE_HEALER) && !DraftBestBot(ROLE_TANK)) break; 
+            if (!DraftBestBot(ROLE_RANGED) && !DraftBestBot(ROLE_MELEE) &&
+                !DraftBestBot(ROLE_HEALER) && !DraftBestBot(ROLE_TANK) &&
+                !DraftBestBot(ROLE_RANGED, 0, false) && !DraftBestBot(ROLE_MELEE, 0, false) &&
+                !DraftBestBot(ROLE_HEALER, 0, false)) break;
         }
+
+        for (auto const& c : BotRaidConfigData::CLASS_CAPS)
+            if (overCap[c.cls])
+                handler->PSendSysMessage("Not enough other bots: drafted {} {} past this lineup's {}.",
+                    overCap[c.cls], overCap[c.cls] == 1 ? c.singular : c.plural, q.*c.count);
 
         if (!group) {
             group = new Group();
