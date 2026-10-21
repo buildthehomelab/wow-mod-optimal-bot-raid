@@ -5,12 +5,16 @@ struct FinderRaid
     char const* alias;
     uint32 map;
     char const* name;
+    uint32 requiredProgression;
 };
 
 static std::vector<FinderRaid> const& FinderRaids()
 {
     static std::vector<FinderRaid> const raids = {
-        { "mc", 409, "Molten Core" }, { "bwl", 469, "Blackwing Lair" }
+#ifdef EVERMORE_LFR_IP
+        { "mc", 409, "Molten Core", PROGRESSION_START },
+        { "bwl", 469, "Blackwing Lair", PROGRESSION_MOLTEN_CORE }
+#endif
     };
     return raids;
 }
@@ -41,27 +45,54 @@ static BotRole FinderRole(Player* member)
     return role;
 }
 
+// Persistent eligibility is shared by catalogue filtering and every action.
+// Do not use transient combat/travel state to hide an otherwise unlocked raid.
+static std::string FinderAccessProblem(Player* member, [[maybe_unused]] FinderRaid const& raid)
+{
+    if (!member || !member->IsInWorld()) return "A group member is offline; eligibility cannot be checked.";
+#ifndef EVERMORE_LFR_IP
+    return "Individual Progression support is required for Raid Finder.";
+#else
+    std::string const who = member->GetName() + ": ";
+    if (!sIndividualProgression->enabled)
+        return "Individual Progression must be enabled for Raid Finder.";
+    if (member->GetLevel() < 60) return who + "requires level 60.";
+    // Use IP's character-stage query and configured account exclusions/realm cap.
+    // Stage zero is the starting tier; hasPassedProgression intentionally rejects zero.
+    if (raid.requiredProgression && sIndividualProgression->isNormalAccount(member) &&
+        !sIndividualProgression->hasPassedProgression(member, static_cast<ProgressionState>(raid.requiredProgression)))
+        return who + "must complete Molten Core progression to enter Blackwing Lair.";
+    if (!member->Satisfy(sObjectMgr->GetAccessRequirement(raid.map, RAID_DIFFICULTY_10MAN_NORMAL), raid.map, false))
+        return who + "does not meet the raid's access requirements (level, quest or item).";
+    return "";
+#endif
+}
+
+static std::string FinderCatalogueProblem(Player* player, FinderRaid const& raid)
+{
+    if (!FinderEnabled(raid)) return "This raid is not enabled for Raid Finder testing.";
+    if (Group* group = player->GetGroup())
+    {
+        for (auto const& slot : group->GetMemberSlots())
+            if (std::string problem = FinderAccessProblem(ObjectAccessor::FindConnectedPlayer(slot.guid), raid); !problem.empty())
+                return problem;
+        return "";
+    }
+    return FinderAccessProblem(player, raid);
+}
+
 static std::string FinderMemberProblem(Player* member, FinderRaid const& raid)
 {
-    if (!member || !member->IsInWorld()) return "A group member is offline.";
+    if (std::string problem = FinderAccessProblem(member, raid); !problem.empty()) return problem;
     std::string const who = member->GetName() + ": ";
     if (!member->IsAlive()) return who + "must be alive.";
     if (member->IsInCombat()) return who + "is in combat.";
     if (member->IsBeingTeleported() || member->IsInFlight() || member->InBattleground() || member->InArena())
         return who + "is travelling or in PvP.";
-    if (member->GetLevel() < 60) return who + "requires level 60.";
     if (member->GetRaidDifficulty() != RAID_DIFFICULTY_10MAN_NORMAL)
         return who + "must select Normal raid difficulty.";
     if (member->GetMap()->Instanceable() && member->GetMapId() != raid.map)
         return who + "must leave the current instance first.";
-#ifdef EVERMORE_LFR_IP
-    if (raid.map == 469 && sIndividualProgression->enabled &&
-        sIndividualProgression->isNormalAccount(member) &&
-        !sIndividualProgression->hasPassedProgression(member, PROGRESSION_MOLTEN_CORE))
-        return who + "must complete Molten Core progression to enter Blackwing Lair.";
-#endif
-    if (!member->Satisfy(sObjectMgr->GetAccessRequirement(raid.map, RAID_DIFFICULTY_10MAN_NORMAL), raid.map, false))
-        return who + "does not meet the raid's access requirements (level, quest or item).";
     // A solo/party preflight is not entry: the assembler has yet to create the raid.
     // CannotEnter also deliberately rejects players ALREADY in the target map.
     // TeleportTo enforces the full checks when an actual entrant crosses maps.
@@ -124,7 +155,7 @@ static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std:
         for (auto const& raid : FinderRaids())
         {
             auto const* lineup = BotRaidConfigData::instance()->FindEncounter(raid.alias);
-            if (!lineup || !lineup->quotas.count(40)) continue;
+            if (!lineup || !lineup->quotas.count(40) || !FinderCatalogueProblem(player, raid).empty()) continue;
             auto const& q = lineup->quotas.at(40);
             FinderSend(player, "RAID\t" + std::string(raid.alias) + "\t" + raid.name + "\t" +
                 std::to_string(raid.map) + "\t" + std::to_string(q.tanks) + "\t" +
