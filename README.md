@@ -348,7 +348,7 @@ The flow is:
    tanks/healers is reported as a failure. A failed or partial draft can leave
    recruited bots grouped: **Dismiss Bots** releases only this leader's drafts,
    subject to the existing dismiss cooldown.
-3. Each human independently confirms **Enter Raid** in their own menu. No other
+3. The leader enters first to establish the shared instance; then each human independently confirms **Enter Raid** in their own menu. No other
    human is teleported by the leader. Existing saves are preserved; conflicting
    permanent saves block preparation. The displayed save is the player's own
    save, not a promise of a fresh instance or loot eligibility.
@@ -356,6 +356,8 @@ The flow is:
    leader's tracked random-bot drafts. Manually invited bots and player alts
    must arrive through their existing controls. Draft tracking does not survive
    a worldserver restart; the finder never reconstructs ownership from a group.
+   Ownership transfers with raid leadership, so rally and dismiss remain available
+   if the original assembler hands over leadership or leaves.
 5. **Start Run** rechecks all 40 members, their roles, access, combat state and
    exact instance before asking Dungeon Clear to start. The footer displays
    Dungeon Clear's reported state/objective. **Pause / Resume** and **Stop Run**
