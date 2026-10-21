@@ -330,6 +330,8 @@ window for 3.3.5a. Copy `addon/EvermoreRaidFinder` into `Interface/AddOns`, then
 open `/lfr` or `/raidfinder`. Install the matching server module revision and
 Dungeon Clear; the DungeonClear and Journal companion addons are recommended.
 The module and addon ship together so their protocol versions stay aligned.
+Raid Finder requires Individual Progression to be compiled in and enabled; it
+offers no raids when that eligibility source is unavailable.
 
 This first pilot covers **full Normal Molten Core and Blackwing Lair** runs.
 There is no separate LFR difficulty, new loot table, wing skipping or simulated
@@ -341,8 +343,15 @@ The flow is:
 
 1. Select a raid and refresh its requirements. The server supplies the enabled
    catalogue, configured composition, roster count, inferred role and personal
-   instance save/reset. Blackwing Lair checks Individual Progression when that
-   module is available; normal access checks still apply.
+   instance save/reset. The catalogue only includes enabled raids unlocked by
+   the character's Individual Progression stage, level and access requirements.
+   Molten Core is the starting raid; Blackwing Lair only appears after Molten
+   Core progression is complete. Previously unlocked raids remain available.
+   Every current group member must meet the same access rules, respecting IP's
+   configured random-bot/account exclusions. A lower-stage human or player alt
+   blocks later content; an offline member's eligibility is not assumed.
+   The same checks run again before assembly, entry, rally and readiness, so
+   manually issuing commands or using an old menu cannot skip progression.
 2. The group leader clicks **Find Raid**. Existing humans/bots count toward the
    lineup; `.botraid` fills the remaining slots. A full roster with insufficient
    tanks/healers is reported as a failure. A failed or partial draft can leave
@@ -363,6 +372,13 @@ The flow is:
    Dungeon Clear's reported state/objective. **Pause / Resume** and **Stop Run**
    use its existing commands. Stopping does not clear saves or leave the raid;
    exit and leave the human group through the normal game controls.
+
+Quest/progression, level, group-roster and world-entry updates invalidate the
+visible offers and automatically refresh the catalogue. Refresh also reloads
+eligibility, including when the list is empty. Old catalogue/readiness responses
+cannot restore a raid or start a run after an invalidation. No eligible entries
+produces an empty menu with its launch buttons disabled, rather than locked
+later-stage raids offered in the list.
 
 The window has **Bosses & Loot** to open Journal's Raids section. It does not
 assume Journal's instance IDs equal map IDs. Full encounter lists, direct raid
