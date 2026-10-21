@@ -56,6 +56,7 @@ Request = function(action)
     if state.pending then return end
     if action ~= "catalog" and (not state.selected or state.catalogDirty) then return end
     if action == "catalog" then state.catalogDirty = true end
+    if action == "assemble" or action == "summon" then state.assemblyResult = nil end
     requestId = requestId % 2147483646 + 1
     state.pending = { action = action, raid = state.selected, at = GetTime(), generation = state.catalogGeneration, id = requestId }
     state.notice = action == "assemble" and "Recruiting the raid..." or "Checking with the realm..."
@@ -64,21 +65,22 @@ Request = function(action)
     Refresh()
 end
 StaticPopupDialogs.EVERMORE_LFR_ENTER = {
-    text = "Enter %s? Existing raid saves and normal loot rules apply. Each human must confirm entry separately.",
-    button1 = "Enter Raid", button2 = CANCEL, timeout = 0, whileDead = false, hideOnEscape = true,
+    text = "Summon to the meeting stone for %s? The leader also brings recruited bots. Each human confirms their own travel. Enter through the normal raid entrance.",
+    button1 = "Summon to Stone", button2 = CANCEL, timeout = 0, whileDead = false, hideOnEscape = true,
     OnAccept = function(self)
-        if self.data == state.selected then Request("enter") end
+        if self.data == state.selected then Request("summon") end
     end,
+    OnCancel = function() state.assemblyResult = nil end,
 }
 local find = Button("Find Raid", 230, -389, 145, function() Request("assemble") end)
-local enter = Button("Enter Raid", 385, -389, 145, function()
+local enter = Button("Summon to Stone", 385, -389, 145, function()
     local raid = state.raids[state.selected]
     if raid then
         local popup = StaticPopup_Show("EVERMORE_LFR_ENTER", raid.name)
         if popup then popup.data = state.selected end
     end
 end)
-local rally = Button("Bring Bots", 540, -389, 145, function() Request("rally") end)
+local rally = Button("Gather Bots", 540, -389, 145, function() Request("rally") end)
 local start = Button("Start Run", 230, -466, 115, function() Request("ready") end)
 local pause = Button("Pause / Resume", 355, -466, 145, function() SendChatMessage(".dc pause", "SAY") end)
 local stop = Button("Stop Run", 510, -466, 115, function() SendChatMessage(".dc off", "SAY") end)
@@ -111,6 +113,7 @@ Refresh = function()
             row:SetScript("OnClick", function(self)
                 if state.pending then return end
                 StaticPopup_Hide("EVERMORE_LFR_ENTER")
+                state.assemblyResult = nil
                 state.selected = self.alias
                 state.members, state.role, state.save = nil, nil, nil
                 run:SetText("")
@@ -160,7 +163,7 @@ events:SetScript("OnEvent", function(_, event, prefix, message, channel, sender)
         end
         M.Invalidate(state)
         StaticPopup_Hide("EVERMORE_LFR_ENTER")
-        state.notice = "Checking progression and group eligibility..."
+        if not state.assemblyResult then state.notice = "Checking progression and group eligibility..." end
         catalogDue = GetTime() + 0.5
         Refresh()
         return
@@ -172,6 +175,9 @@ events:SetScript("OnEvent", function(_, event, prefix, message, channel, sender)
         Refresh()
         if result == "catalog" and state.selected then Request("status") end
         if result == "assemble" then
+            catalogDue = GetTime() + 0.5
+        elseif result == "status" and state.assemblyResult and state.assemblyResult.success
+            and state.assemblyResult.raid == state.selected and state.raids[state.selected] then
             local popup = StaticPopup_Show("EVERMORE_LFR_ENTER", state.raids[state.selected].name)
             if popup then popup.data = state.selected end
         elseif result == "ready" then
