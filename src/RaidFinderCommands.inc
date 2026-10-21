@@ -191,11 +191,21 @@ static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std:
     {
         if (!group || !group->isRaidGroup() || group->GetMembersCount() != 40)
             return reply(false, "The raid leader must assemble the complete roster first.");
-        if (player->GetMapId() == raid.map) return reply(true, "You are already inside. The leader can bring the bots.");
+        Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
+        if (!leader || !leader->IsInWorld() || leader->IsBeingTeleported())
+            return reply(false, "Wait for the raid leader to finish travelling.");
+        if (leader != player && leader->GetMapId() != raid.map)
+            return reply(false, "The raid leader must enter first to establish the shared instance.");
+        if (player->GetMapId() == raid.map)
+        {
+            if (leader->GetMapId() == raid.map && player->GetInstanceId() == leader->GetInstanceId())
+                return reply(true, "You are already in the leader's instance. The leader can bring the bots.");
+            return reply(false, "You are in another copy of this raid. Leave that instance, then Enter Raid again.");
+        }
         AreaTriggerTeleport const* entrance = sObjectMgr->GetMapEntranceTrigger(raid.map);
         if (!entrance || entrance->target_mapId != raid.map) return reply(false, "The server has no entrance for this raid.");
         // TeleportTo runs the progression module's hooks and the core's entry checks.
-        if (!player->TeleportTo(raid.map, entrance->target_X, entrance->target_Y, entrance->target_Z, entrance->target_Orientation))
+        if (!player->TeleportTo(raid.map, entrance->target_X, entrance->target_Y, entrance->target_Z, entrance->target_Orientation, 0, leader == player ? nullptr : leader))
             return reply(false, "Entry refused by the server. Check chat for progression or access requirements.");
         return reply(true, "Entering raid. After arrival, the leader can bring the bots.");
     }
