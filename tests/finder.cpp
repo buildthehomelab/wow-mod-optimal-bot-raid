@@ -150,6 +150,13 @@ int main() {
     std::cout << "PASS: missing Individual Progression offers no raids or assembly\n";
     return 0;
 #endif
+    leader.session.packets.clear();
+    Commands::HandleFinder(&handler, "catalog", std::string("-"), uint32(123));
+    for (auto const& packet : leader.session.packets)
+        assert(packet.find("EMLFR\t2\t123\t") == 0);
+    leader.session.packets.clear();
+    Commands::HandleFinder(&handler, "ready", std::string("bwl"), uint32(124));
+    assert(leader.session.last.find("EMLFR\t2\t124\tRESULT\tready\tbwl\t") == 0);
     auto raid = Commands::FinderRaids()[0];
     config.enabled = false;
     assert(!Commands::FinderProblem(&leader, raid).empty());
