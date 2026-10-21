@@ -2,7 +2,7 @@
 ## Title: Evermore Raid Finder
 ## Notes: Assemble and enter bot-led Evermore raids.
 ## Author: Project Evermore
-## Version: 0.1.0
+## Version: 0.1.1
 ## OptionalDeps: DragonUI, DungeonClear, Journal
 Model.lua
 RaidFinder.lua
