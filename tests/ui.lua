@@ -18,10 +18,20 @@ function CreateFrame(kind, name)
 end
 UIParent = {}; UISpecialFrames = {}; StaticPopupDialogs = {}; SlashCmdList = {}; CANCEL = 'Cancel'
 local now = 0
+local lastNonce
 function GetTime() return now end
 function GetNumRaidMembers() return 40 end
 function UnitName() return 'Tester' end
-function SendChatMessage(text, channel) sent[#sent + 1] = { text, channel } end
+function SendChatMessage(text, channel)
+    local raw = text
+    if string.find(text, '^%.botraid finder ') then
+        lastNonce = string.match(text, ' (%d+)$')
+        assert(lastNonce, 'finder commands must carry request IDs')
+        text = string.gsub(text, ' %d+$', '')
+        text = string.gsub(text, ' catalog %-$', ' catalog')
+    end
+    sent[#sent + 1] = { text, channel, raw }
+end
 function SendAddonMessage(prefix, text, channel) sent[#sent + 1] = { prefix .. ':' .. text, channel } end
 function date(_, n) return tostring(n) end
 local popup
@@ -31,7 +41,8 @@ dofile('addon/EvermoreRaidFinder/Model.lua')
 dofile('addon/EvermoreRaidFinder/RaidFinder.lua')
 local f = EvermoreRaidFinderFrame
 local events = frames[#frames]
-local function message(text, sender)
+local function message(text, sender, nonce)
+    text = "2\t" .. (nonce or lastNonce) .. "\t" .. string.sub(text, 3)
     events.scripts.OnEvent(events, 'CHAT_MSG_ADDON', 'EMLFR', text, 'WHISPER', sender or 'Tester')
 end
 SlashCmdList.EVERMORERAIDFINDER()
@@ -86,3 +97,17 @@ assert(not buttons['Start Run'].enabled)
 now = now + 0.5; f.scripts.OnUpdate(f, 0.5)
 assert(sent[#sent][1] == '.botraid finder catalog')
 print('PASS: arrival/progression events invalidate offers and refresh the catalogue; empty catalogue cannot launch')
+
+-- An old END must not complete a newer catalogue after the first request times out.
+local oldNonce = lastNonce
+now = now + 11; f.scripts.OnUpdate(f, 11)
+buttons.Refresh.scripts.OnClick()
+assert(lastNonce ~= oldNonce)
+message('1\tBEGIN', nil, oldNonce)
+message('1\tRAID\tbwl\tOld raid\t469\t2\t3\t35\t1', nil, oldNonce)
+message('1\tEND', nil, oldNonce)
+assert(not buttons.Refresh.enabled and not buttons['Find Raid'].enabled)
+message('1\tBEGIN')
+message('1\tEND')
+assert(buttons.Refresh.enabled and not buttons['Find Raid'].enabled)
+print('PASS: real UI rejects timed-out catalogue packets during retry')
