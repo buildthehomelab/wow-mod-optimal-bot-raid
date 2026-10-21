@@ -82,8 +82,8 @@ local enter = Button("Summon to Stone", 385, -389, 145, function()
 end)
 local rally = Button("Gather Bots", 540, -389, 145, function() Request("rally") end)
 local start = Button("Start Run", 230, -466, 115, function() Request("ready") end)
-local pause = Button("Pause / Resume", 355, -466, 145, function() SendChatMessage(".dc pause", "SAY") end)
-local stop = Button("Stop Run", 510, -466, 115, function() SendChatMessage(".dc off", "SAY") end)
+Button("Pause / Resume", 355, -466, 145, function() SendChatMessage(".dc pause", "SAY") end)
+Button("Stop Run", 510, -466, 115, function() SendChatMessage(".dc off", "SAY") end)
 local check = Button("Refresh", 28, -282, 174, function() Request("catalog") end)
 local journal = Button("Bosses & Loot", 28, -320, 174, function()
     if Journal and Journal.OpenSection then Journal.OpenSection("raids")
@@ -94,7 +94,7 @@ StaticPopupDialogs.EVERMORE_LFR_DISMISS = {
     button1 = "Dismiss Bots", button2 = CANCEL, timeout = 0, whileDead = false, hideOnEscape = true,
     OnAccept = function() SendChatMessage(".dc off", "SAY"); SendChatMessage(".botraid dismiss", "SAY") end,
 }
-local dismiss = Button("Dismiss Bots", 28, -358, 174, function() StaticPopup_Show("EVERMORE_LFR_DISMISS") end)
+Button("Dismiss Bots", 28, -358, 174, function() StaticPopup_Show("EVERMORE_LFR_DISMISS") end)
 local names = { mc = "Descend into the Firelord's domain.\n\nFull raid • Level 60 bots • Normal difficulty",
     bwl = "Assault Nefarian's stronghold above Blackrock Spire.\n\nFull raid • Level 60 bots • Normal difficulty" }
 Refresh = function()
