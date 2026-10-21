@@ -28,6 +28,13 @@
 #include "InstanceSaveMgr.h"
 #include "World.h"
 #include "GameTime.h"
+#include "ObjectMgr.h"
+#include "MapMgr.h"
+#include "WorldPacket.h"
+#if __has_include("IndividualProgression.h")
+#include "IndividualProgression.h"
+#define EVERMORE_LFR_IP 1
+#endif
 #include <vector>
 #include <string>
 #include <cmath>
@@ -447,6 +454,7 @@ public:
 
     ChatCommandTable GetCommands() const override {
         static ChatCommandTable botRaidTable = {
+            { "finder",    HandleFinder,     SEC_PLAYER, Console::No },
             { "assemble",  HandleAssemble,   SEC_PLAYER, Console::No },
             { "dismiss",   HandleDismiss,    SEC_PLAYER, Console::No },
             { "debug",     HandleDebug,      SEC_GAMEMASTER, Console::No },
@@ -459,6 +467,8 @@ public:
         static ChatCommandTable commandTable = { { "botraid", botRaidTable } };
         return commandTable;
     }
+
+    #include "RaidFinderCommands.inc"
 
     // Lists the raid lineups and what to type for each.
     static bool HandleRaids(ChatHandler* handler)
