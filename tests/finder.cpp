@@ -109,6 +109,7 @@ struct BotRaidConfigData {
 };
 std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> s_draftedBots;
 std::mutex s_draftedBotsLock;
+#include "../src/BotRaidDraftOwnership.inc"
 #ifdef EVERMORE_LFR_IP
 constexpr int PROGRESSION_MOLTEN_CORE = 1;
 struct Progression {
@@ -157,8 +158,20 @@ int main() {
     }
     assert(Commands::FinderProblem(&leader, raid).empty());
     assert(!Commands::FinderProblem(&leader, raid, true).empty()); // not arrived
+    // A friend cannot create a separate unsaved copy before the leader arrives.
+    bots.back().bot = bots.back().random = false;
+    s_draftedBots[1].erase(40);
+    ChatHandler friendHandler{&bots.back()};
+    Commands::HandleFinder(&friendHandler, "enter", std::string("mc"));
+    assert(bots.back().map == 0 && bots.back().session.last.find("leader must enter first") != std::string::npos);
     Commands::HandleFinder(&handler, "enter", std::string("mc"));
     assert(leader.map == 409 && leader.instance == 10);
+    Commands::HandleFinder(&friendHandler, "enter", std::string("mc"));
+    assert(bots.back().map == 409 && bots.back().instance == leader.instance);
+    bots.back().instance = 999;
+    Commands::HandleFinder(&friendHandler, "enter", std::string("mc"));
+    assert(bots.back().session.last.find("another copy") != std::string::npos);
+    bots.back().instance = leader.instance;
     Commands::HandleFinder(&handler, "rally", std::string("mc"));
     assert(leader.session.last.find("RESULT\trally\tmc\t1") != std::string::npos);
     assert(Commands::FinderProblem(&leader, raid, true).empty()); // already-in-map is not entry
@@ -185,6 +198,15 @@ int main() {
     s_draftedBots[1].insert(2); bots[0].teleport = false;
     Commands::HandleFinder(&handler, "rally", std::string("mc"));
     assert(leader.session.last.find("could not enter") != std::string::npos);
+    // Transfer the actual production ownership ledger to a new leader; rally
+    // must use that ledger even after the former owner's entry is forgotten.
+    TransferDraftOwnership(1, 40);
+    group.leader = 40;
+    assert(!s_draftedBots.count(1) && s_draftedBots[40].count(2));
+    bots[0].teleport = true;
+    Commands::HandleFinder(&friendHandler, "rally", std::string("mc"));
+    assert(bots[0].map == 409 && bots[0].instance == bots.back().instance);
+    TransferDraftOwnership(40, 1); group.leader = 1;
     leader.map = leader.instance = 0; leader.teleport = false;
     Commands::HandleFinder(&handler, "enter", std::string("mc"));
     assert(leader.map == 0 && leader.session.last.find("Entry refused") != std::string::npos);
