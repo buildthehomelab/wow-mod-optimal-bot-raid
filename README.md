@@ -350,28 +350,37 @@ The flow is:
    Every current group member must meet the same access rules, respecting IP's
    configured random-bot/account exclusions. A lower-stage human or player alt
    blocks later content; an offline member's eligibility is not assumed.
-   The same checks run again before assembly, entry, rally and readiness, so
+   The same checks run again before assembly, summoning, gathering and readiness, so
    manually issuing commands or using an old menu cannot skip progression.
 2. The group leader clicks **Find Raid**. Existing humans/bots count toward the
    lineup; `.botraid` fills the remaining slots. A full roster with insufficient
    tanks/healers is reported as a failure. A failed or partial draft can leave
    recruited bots grouped: **Dismiss Bots** releases only this leader's drafts,
    subject to the existing dismiss cooldown.
-3. The leader enters first to establish the shared instance; then each human independently confirms **Enter Raid** in their own menu. No other
-   human is teleported by the leader. Existing saves are preserved; conflicting
-   permanent saves block preparation. The displayed save is the player's own
-   save, not a promise of a fresh instance or loot eligibility.
-4. After arriving, the leader clicks **Bring Bots**, which only moves this
-   leader's tracked random-bot drafts. Manually invited bots and player alts
-   must arrive through their existing controls. Draft tracking does not survive
-   a worldserver restart; the finder never reconstructs ownership from a group.
-   Ownership transfers with raid leadership, so rally and dismiss remain available
-   if the original assembler hands over leadership or leaves.
-5. **Start Run** rechecks all 40 members, their roles, access, combat state and
-   exact instance before asking Dungeon Clear to start. The footer displays
-   Dungeon Clear's reported state/objective. **Pause / Resume** and **Stop Run**
-   use its existing commands. Stopping does not clear saves or leave the raid;
-   exit and leave the human group through the normal game controls.
+3. Recruitment's roster updates are reconciled before offering travel: the
+   assembly reply is retained while the updated group is revalidated. Failure
+   details remain visible rather than disappearing during that refresh.
+4. Confirm **Summon to Stone** to travel to the exterior meeting stone. The
+   leader's confirmation also summons all tracked random-bot drafts to that
+   stone. Other humans each confirm their own travel; the leader never teleports
+   them. Manually invited bots/player alts keep their existing travel controls.
+   There is no direct LFR teleport into the instance, and LFR recruitment itself
+   requires the leader to be outside instances. **Gather Bots** retries owned
+   bot travel while the leader stands at the stone.
+5. Enter through the normal entrance, preferably with the leader first to
+   establish the shared instance. Bot following/portal behavior remains provided
+   by Playerbots and needs staging validation. **Start Run** rechecks all 40
+   members, their roles, access, combat state and exact instance before asking
+   Dungeon Clear to start. It will not start while the group is still outside.
+   The footer displays DC's reported state/objective. **Pause / Resume** and
+   **Stop Run** use its existing commands. Stopping does not clear saves or leave
+   the raid; exit and leave the human group through the normal game controls.
+
+Existing saves are preserved; conflicting permanent saves block preparation.
+The displayed save is the player's own save, not a promise of a fresh instance
+or loot eligibility. Draft ownership transfers with raid leadership. Tracking
+does not survive a worldserver restart; ownership is never reconstructed from
+arbitrary group membership.
 
 Quest/progression, level, group-roster and world-entry updates invalidate the
 visible offers and automatically refresh the catalogue. Refresh also reloads
@@ -395,7 +404,20 @@ individually after staging tests, using the wow-server override convention:
 OptimalBotRaid.Finder.Enable = 1
 OptimalBotRaid.Finder.mc = 1
 OptimalBotRaid.Finder.bwl = 0
+OptimalBotRaid.Finder.mc.MeetingStoneSpawn = 427
+OptimalBotRaid.Finder.bwl.MeetingStoneSpawn = 428
 ```
+
+The meeting-stone settings are **gameobject spawn GUIDs**, not template entries.
+Defaults come from the verified core world data: spawn 427 / template 179584 is
+Blackrock Depths' exterior stone (used for the MC approach), and spawn 428 /
+template 179585 is the Spire exterior stone (used for BWL). Both are on world
+map 0. These are existing Blackrock stones, not new raid-specific objects.
+Coordinates are read from the realm's loaded spawn cache, with a small landing
+offset beside the object. Custom realms can select another real stone spawn.
+Missing stones, wrong object types and instance-interior destinations are
+rejected; the finder never falls back to teleporting into the raid. Verify the
+landing space and walk to each entrance against the realm's terrain/client patches.
 
 Default disabled does not establish that the raid automation is validated.
 Navigation, scripted events and combat mechanics still depend on the deployed
@@ -403,7 +425,7 @@ Dungeon Clear and Playerbots revisions. The finder never changes difficulty,
 unbinds saves, manufactures loot eligibility or teleports with GM bypass flags.
 
 Before live enablement, test: solo and friend-party assembly, role shortages,
-progression/access failures, personal/group save conflicts, human confirmation,
+progression/access failures, personal/group save conflicts, human confirmation, stone landing/walk-to-entrance,
 partial arrivals, manual/alt bots, a failed teleport, pause/resume, death/wipe,
 reconnect/restart, boss/loot progress and a complete run. This change has not
 been validated in the game client or a running worldserver. The small contract
