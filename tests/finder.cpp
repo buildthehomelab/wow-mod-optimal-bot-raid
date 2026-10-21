@@ -18,12 +18,12 @@ constexpr int RAID_DIFFICULTY_10MAN_NORMAL = 0, CLASS_DRUID = 11;
 constexpr int CHAT_MSG_WHISPER = 1, LANG_ADDON = 2, CHAT_TAG_NONE = 0;
 enum BotRole { ROLE_TANK, ROLE_HEALER, ROLE_MELEE, ROLE_RANGED, ROLE_UNKNOWN };
 struct WorldPacket { std::string data; };
-struct Session { std::string last; void SendPacket(WorldPacket* p) { last = p->data; } };
+struct Session { std::string last; std::vector<std::string> packets; void SendPacket(WorldPacket* p) { last = p->data; packets.push_back(last); } };
 struct Map { bool instance = false; bool Instanceable() const { return instance; } };
 struct Group;
 struct Player {
-    uint32 id, map = 0, instance = 0, level = 60, cls = 1;
-    bool alive = true, combat = false, moving = false, world = true, bot = false, random = false, access = true, teleport = true, progressed = true;
+    uint32 id, map = 0, instance = 0, level = 60, cls = 1, stage = 1;
+    bool alive = true, combat = false, moving = false, world = true, bot = false, random = false, access = true, teleport = true, excluded = false;
     BotRole role = ROLE_RANGED;
     Group* group = nullptr;
     Session session; Map location;
@@ -111,11 +111,11 @@ std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> s_draftedBots;
 std::mutex s_draftedBotsLock;
 #include "../src/BotRaidDraftOwnership.inc"
 #ifdef EVERMORE_LFR_IP
-constexpr int PROGRESSION_MOLTEN_CORE = 1;
+enum ProgressionState : uint32 { PROGRESSION_START = 0, PROGRESSION_MOLTEN_CORE = 1 };
 struct Progression {
     bool enabled = true;
-    bool isNormalAccount(Player* p) const { return !p->bot; }
-    bool hasPassedProgression(Player* p, int) const { return p->progressed; }
+    bool isNormalAccount(Player* p) const { return !p->random && !p->excluded; }
+    bool hasPassedProgression(Player* p, ProgressionState stage) const { return enabled && stage && p->stage >= stage; }
 } progression;
 auto* sIndividualProgression = &progression;
 #endif
@@ -128,12 +128,28 @@ struct ChatHandler {
 struct Commands {
     static uint32 GetBotSpec(Player*, uint32) { return 0; }
     static void MapBotProfile(Player* p, uint32, BotRole& r, float&, uint32&) { r = p->role; }
-    static bool ExecuteAssemble(ChatHandler*, int, int, bool, int, BotRaidConfigData::EncounterLineup const*) { return true; }
+    inline static int assembleCalls = 0;
+    static bool ExecuteAssemble(ChatHandler*, int, int, bool, int, BotRaidConfigData::EncounterLineup const*) { ++assembleCalls; return true; }
 #include "../src/RaidFinderCommands.inc"
 };
 int main() {
     Player leader{1}; players[1] = &leader;
     ChatHandler handler{&leader};
+    auto catalogue = [&]() {
+        leader.session.packets.clear();
+        Commands::HandleFinder(&handler, "catalog", {});
+        std::string result;
+        for (auto const& packet : leader.session.packets) result += packet + "\n";
+        return result;
+    };
+#ifndef EVERMORE_LFR_IP
+    assert(Commands::FinderRaids().empty());
+    assert(catalogue().find("RAID\t") == std::string::npos);
+    Commands::HandleFinder(&handler, "assemble", std::string("bwl"));
+    assert(Commands::assembleCalls == 0);
+    std::cout << "PASS: missing Individual Progression offers no raids or assembly\n";
+    return 0;
+#endif
     auto raid = Commands::FinderRaids()[0];
     config.enabled = false;
     assert(!Commands::FinderProblem(&leader, raid).empty());
@@ -141,15 +157,50 @@ int main() {
     assert(Commands::FinderProblem(&leader, raid).empty()); // solo may prepare
     assert(maps.calls == 0); // must not ask the core to enter an uncreated raid
 #ifdef EVERMORE_LFR_IP
-    leader.progressed = false;
+    progression.enabled = false;
+    assert(catalogue().find("RAID\t") == std::string::npos);
+    assert(Commands::FinderProblem(&leader, raid).find("must be enabled") != std::string::npos);
+    progression.enabled = true;
+    leader.stage = 0;
+    assert(catalogue().find("RAID\tmc\t") != std::string::npos);
+    assert(catalogue().find("RAID\tbwl\t") == std::string::npos);
+    for (auto const& action : {"assemble", "enter", "rally", "ready"}) {
+        Commands::HandleFinder(&handler, action, std::string("bwl"));
+        assert(leader.session.last.find("complete Molten Core") != std::string::npos);
+    }
+    assert(Commands::assembleCalls == 0 && leader.map == 0);
     assert(Commands::FinderProblem(&leader, Commands::FinderRaids()[1]).find("complete Molten Core") != std::string::npos);
-    leader.progressed = true;
+    leader.stage = 1;
     assert(Commands::FinderProblem(&leader, Commands::FinderRaids()[1]).empty());
+    assert(catalogue().find("RAID\tbwl\t") != std::string::npos);
+    leader.stage = 18;
+    assert(catalogue().find("RAID\tmc\t") != std::string::npos); // prior tiers remain unlocked
+    leader.level = 59;
+    assert(catalogue().find("RAID\t") == std::string::npos);
+    leader.level = 60; leader.access = false;
+    assert(catalogue().find("RAID\t") == std::string::npos);
+    leader.access = true; leader.stage = 1;
 #endif
     Group group; group.Add(leader);
     group.raid = false;
     assert(Commands::FinderProblem(&leader, raid).empty()); // ordinary party may prepare
     group.raid = true;
+#ifdef EVERMORE_LFR_IP
+    Player friendAtStart{99}; friendAtStart.stage = 0; players[99] = &friendAtStart;
+    group.Add(friendAtStart);
+    assert(catalogue().find("RAID\tbwl\t") == std::string::npos);
+    assert(!Commands::FinderProblem(&leader, Commands::FinderRaids()[1]).empty());
+    // Alt bots on normal accounts keep their character gates; random/excluded accounts follow IP policy.
+    friendAtStart.bot = true;
+    assert(catalogue().find("RAID\tbwl\t") == std::string::npos);
+    friendAtStart.random = true;
+    assert(catalogue().find("RAID\tbwl\t") != std::string::npos);
+    friendAtStart.random = false; friendAtStart.excluded = true;
+    assert(catalogue().find("RAID\tbwl\t") != std::string::npos);
+    players.erase(99);
+    assert(catalogue().find("RAID\t") == std::string::npos); // unknown member is not assumed eligible
+    group.slots.pop_back(); group.refs.pop_back();
+#endif
     std::vector<Player> bots; bots.reserve(39);
     for (uint32 id = 2; id <= 40; ++id) {
         bots.push_back(Player{id}); auto& bot = bots.back(); bot.bot = bot.random = true;
