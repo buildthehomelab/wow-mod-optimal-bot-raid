@@ -6,14 +6,15 @@ struct FinderRaid
     uint32 map;
     char const* name;
     uint32 requiredProgression;
+    uint32 meetingStoneSpawn;
 };
 
 static std::vector<FinderRaid> const& FinderRaids()
 {
     static std::vector<FinderRaid> const raids = {
 #ifdef EVERMORE_LFR_IP
-        { "mc", 409, "Molten Core", PROGRESSION_START },
-        { "bwl", 469, "Blackwing Lair", PROGRESSION_MOLTEN_CORE }
+        { "mc", 409, "Molten Core", PROGRESSION_START, 427 },
+        { "bwl", 469, "Blackwing Lair", PROGRESSION_MOLTEN_CORE, 428 }
 #endif
     };
     return raids;
@@ -32,6 +33,55 @@ static bool FinderEnabled(FinderRaid const& raid)
 {
     return sConfigMgr->GetOption<bool>("OptimalBotRaid.Finder.Enable", false) &&
         sConfigMgr->GetOption<bool>(std::string("OptimalBotRaid.Finder.") + raid.alias, false);
+}
+
+// Use the realm's loaded spawn coordinates; never accept a client destination.
+// Default Blackrock stones: BRD approach for MC, Spire approach for BWL.
+static GameObjectData const* FinderStone(FinderRaid const& raid)
+{
+    uint32 const spawn = sConfigMgr->GetOption<uint32>(
+        std::string("OptimalBotRaid.Finder.") + raid.alias + ".MeetingStoneSpawn", raid.meetingStoneSpawn);
+    auto const* stone = sObjectMgr->GetGameObjectData(spawn);
+    if (!stone) return nullptr;
+    auto const* object = sObjectMgr->GetGameObjectTemplate(stone->id);
+    auto const* map = sMapStore.LookupEntry(stone->mapid);
+    if (!object || object->type != GAMEOBJECT_TYPE_MEETINGSTONE || !map || map->Instanceable())
+        return nullptr;
+    return stone;
+}
+
+static bool FinderAtStone(Player* player, GameObjectData const& stone)
+{
+    float const dx = player->GetPositionX() - stone.posX;
+    float const dy = player->GetPositionY() - stone.posY;
+    float const dz = player->GetPositionZ() - stone.posZ;
+    return player->GetMapId() == stone.mapid && dx * dx + dy * dy + dz * dz <= 400.0f;
+}
+
+static bool FinderTravelToStone(Player* player, GameObjectData const& stone)
+{
+    if (FinderAtStone(player, stone)) return true;
+    // Land beside the object rather than inside its collision. Staging traversal
+    // must verify this small offset against the realm's terrain/client patches.
+    return player->TeleportTo(stone.mapid,
+        stone.posX + 3.0f * std::cos(stone.orientation),
+        stone.posY + 3.0f * std::sin(stone.orientation), stone.posZ + 0.5f, stone.orientation);
+}
+
+static std::string FinderGatherDrafts(Player* player, GameObjectData const& stone)
+{
+    std::unordered_set<ObjectGuid> drafted;
+    { std::lock_guard<std::mutex> lock(s_draftedBotsLock);
+      auto it = s_draftedBots.find(player->GetGUID());
+      if (it != s_draftedBots.end()) drafted = it->second; }
+    Group* group = player->GetGroup();
+    if (!group) return "You need an assembled raid.";
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        if (Player* bot = ref->GetSource(); bot && drafted.count(bot->GetGUID()) &&
+            PlayerbotsMgr::instance().GetPlayerbotAI(bot) && sRandomPlayerbotMgr.IsRandomBot(bot))
+            if (!FinderTravelToStone(bot, stone))
+                return bot->GetName() + ": could not be summoned. Some members may already be travelling; use Gather Bots at the stone to retry.";
+    return "";
 }
 
 static BotRole FinderRole(Player* member)
@@ -71,6 +121,7 @@ static std::string FinderAccessProblem(Player* member, [[maybe_unused]] FinderRa
 static std::string FinderCatalogueProblem(Player* player, FinderRaid const& raid)
 {
     if (!FinderEnabled(raid)) return "This raid is not enabled for Raid Finder testing.";
+    if (!FinderStone(raid)) return "The raid has no valid outdoor meeting stone.";
     if (Group* group = player->GetGroup())
     {
         for (auto const& slot : group->GetMemberSlots())
@@ -108,6 +159,7 @@ static std::string FinderProblem(Player* player, FinderRaid const& raid, bool re
     if (!FinderEnabled(raid)) return "This raid is not enabled for Raid Finder testing.";
     auto const* lineup = BotRaidConfigData::instance()->FindEncounter(raid.alias);
     if (!lineup || !lineup->quotas.count(40)) return "The raid's 40-player lineup is unavailable.";
+    if (!ready && !FinderStone(raid)) return "The raid has no valid outdoor meeting stone.";
     Group* group = player->GetGroup();
     if (group && group->GetMembersCount() > 40) return "The group is too large.";
     if (group && group->isLFGGroup()) return "Leave the Dungeon Finder group before preparing a raid.";
@@ -178,7 +230,7 @@ static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std:
     if (!selected) return reply(false, "Select a raid first.");
     FinderRaid const& raid = *selected;
     Group* group = player->GetGroup();
-    if (action != "status" && action != "enter" && group && !group->IsLeader(player->GetGUID()))
+    if (action != "status" && action != "summon" && group && !group->IsLeader(player->GetGUID()))
         return reply(false, "Only the raid leader can prepare or control the raid.");
     if (action == "status")
     {
@@ -193,12 +245,14 @@ static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std:
         std::string problem = FinderProblem(player, raid);
         return reply(problem.empty(), problem.empty() ? "Ready to prepare. " + save : problem);
     }
-    if (action != "assemble" && action != "enter" && action != "rally" && action != "ready")
+    if (action != "assemble" && action != "summon" && action != "rally" && action != "ready")
         return reply(false, "Unknown Raid Finder action.");
     if (std::string problem = FinderProblem(player, raid, action == "ready"); !problem.empty())
         return reply(false, problem);
     if (action == "assemble")
     {
+        if (player->GetMap()->Instanceable())
+            return reply(false, "Leave the instance before recruiting through Raid Finder; groups gather at the outdoor meeting stone.");
         if (FinderRole(player) == ROLE_TANK)
             return reply(false, "Autonomous runs currently support human healers and damage dealers. A bot tank leads.");
         ExecuteAssemble(handler, 60, 60, true, 40, BotRaidConfigData::instance()->FindEncounter(raid.alias));
@@ -218,45 +272,29 @@ static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std:
         if (!botTank || tanks < uint32(quota.tanks) || healers < uint32(quota.healers))
             return reply(false, "Recruitment is short of tanks or healers. Dismiss drafted bots and retry later.");
         if (std::string problem = FinderProblem(player, raid); !problem.empty()) return reply(false, problem);
-        return reply(true, "Raid assembled. Each human player must confirm Enter Raid in their own menu.");
+        return reply(true, "Raid assembled. Confirm Summon to Stone to gather outside; each human confirms their own travel.");
     }
-    if (action == "enter")
+    if (action == "summon")
     {
         if (!group || !group->isRaidGroup() || group->GetMembersCount() != 40)
             return reply(false, "The raid leader must assemble the complete roster first.");
-        Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
-        if (!leader || !leader->IsInWorld() || leader->IsBeingTeleported())
-            return reply(false, "Wait for the raid leader to finish travelling.");
-        if (leader != player && leader->GetMapId() != raid.map)
-            return reply(false, "The raid leader must enter first to establish the shared instance.");
-        if (player->GetMapId() == raid.map)
-        {
-            if (leader->GetMapId() == raid.map && player->GetInstanceId() == leader->GetInstanceId())
-                return reply(true, "You are already in the leader's instance. The leader can bring the bots.");
-            return reply(false, "You are in another copy of this raid. Leave that instance, then Enter Raid again.");
-        }
-        AreaTriggerTeleport const* entrance = sObjectMgr->GetMapEntranceTrigger(raid.map);
-        if (!entrance || entrance->target_mapId != raid.map) return reply(false, "The server has no entrance for this raid.");
-        // TeleportTo runs the progression module's hooks and the core's entry checks.
-        if (!player->TeleportTo(raid.map, entrance->target_X, entrance->target_Y, entrance->target_Z, entrance->target_Orientation, 0, leader == player ? nullptr : leader))
-            return reply(false, "Entry refused by the server. Check chat for progression or access requirements.");
-        return reply(true, "Entering raid. After arrival, the leader can bring the bots.");
+        auto const* stone = FinderStone(raid);
+        if (!stone) return reply(false, "The raid has no valid outdoor meeting stone.");
+        if (!FinderTravelToStone(player, *stone))
+            return reply(false, "Summon refused by the server. No instance entry was attempted.");
+        // Only the leader moves the tracked random-bot drafts. Friends confirm
+        // their own travel; manually invited bots and player alts are untouched.
+        if (group->IsLeader(player->GetGUID()))
+            if (std::string problem = FinderGatherDrafts(player, *stone); !problem.empty()) return reply(false, problem);
+        return reply(true, "Summoning to the outdoor meeting stone. Gather there, then use the normal raid entrance.");
     }
     if (action == "rally")
     {
-        if (!group || player->GetMapId() != raid.map) return reply(false, "Enter the selected raid first.");
-        std::unordered_set<ObjectGuid> drafted;
-        { std::lock_guard<std::mutex> lock(s_draftedBotsLock);
-          auto it = s_draftedBots.find(player->GetGUID());
-          if (it != s_draftedBots.end()) drafted = it->second; }
-        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-            if (Player* bot = ref->GetSource(); bot && drafted.count(bot->GetGUID()) &&
-                PlayerbotsMgr::instance().GetPlayerbotAI(bot) && sRandomPlayerbotMgr.IsRandomBot(bot) &&
-                (bot->GetMapId() != raid.map || bot->GetInstanceId() != player->GetInstanceId()))
-                if (!bot->TeleportTo(raid.map, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(),
-                    player->GetOrientation(), 0, player))
-                    return reply(false, bot->GetName() + ": could not enter. No saves were cleared.");
-        return reply(true, "Bots called to your instance. Wait for arrivals, then Start Run.");
+        auto const* stone = FinderStone(raid);
+        if (!stone || !FinderAtStone(player, *stone))
+            return reply(false, "Stand at the selected raid's outdoor meeting stone to Gather Bots.");
+        if (std::string problem = FinderGatherDrafts(player, *stone); !problem.empty()) return reply(false, problem);
+        return reply(true, "Drafted bots summoned to the meeting stone. Enter the raid together through its normal entrance.");
     }
     return reply(true, "The roster is ready in this instance.");
 }
