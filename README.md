@@ -322,3 +322,85 @@ For developers and contributors, this module hooks into the following core syste
 
 ## 📄 License
 This project is licensed under the GNU AGPL v3.0 - see the LICENSE file for details.
+
+## Evermore Raid Finder pilot
+
+The bundled **EvermoreRaidFinder** addon adds a retail-inspired raid selection
+window for 3.3.5a. Copy `addon/EvermoreRaidFinder` into `Interface/AddOns`, then
+open `/lfr` or `/raidfinder`. Install the matching server module revision and
+Dungeon Clear; the DungeonClear and Journal companion addons are recommended.
+The module and addon ship together so their protocol versions stay aligned.
+
+This first pilot covers **full Normal Molten Core and Blackwing Lair** runs.
+There is no separate LFR difficulty, new loot table, wing skipping or simulated
+queue. Roles are inferred from the active specialization using the assembler's
+existing classifier. Human healers and damage dealers can lead preparation;
+a bot tank leads navigation. Human tank selection is deferred.
+
+The flow is:
+
+1. Select a raid and refresh its requirements. The server supplies the enabled
+   catalogue, configured composition, roster count, inferred role and personal
+   instance save/reset. Blackwing Lair checks Individual Progression when that
+   module is available; normal access checks still apply.
+2. The group leader clicks **Find Raid**. Existing humans/bots count toward the
+   lineup; `.botraid` fills the remaining slots. A full roster with insufficient
+   tanks/healers is reported as a failure. A failed or partial draft can leave
+   recruited bots grouped: **Dismiss Bots** releases only this leader's drafts,
+   subject to the existing dismiss cooldown.
+3. Each human independently confirms **Enter Raid** in their own menu. No other
+   human is teleported by the leader. Existing saves are preserved; conflicting
+   permanent saves block preparation. The displayed save is the player's own
+   save, not a promise of a fresh instance or loot eligibility.
+4. After arriving, the leader clicks **Bring Bots**, which only moves this
+   leader's tracked random-bot drafts. Manually invited bots and player alts
+   must arrive through their existing controls. Draft tracking does not survive
+   a worldserver restart; the finder never reconstructs ownership from a group.
+5. **Start Run** rechecks all 40 members, their roles, access, combat state and
+   exact instance before asking Dungeon Clear to start. The footer displays
+   Dungeon Clear's reported state/objective. **Pause / Resume** and **Stop Run**
+   use its existing commands. Stopping does not clear saves or leave the raid;
+   exit and leave the human group through the normal game controls.
+
+The window has **Bosses & Loot** to open Journal's Raids section. It does not
+assume Journal's instance IDs equal map IDs. Full encounter lists, direct raid
+links and selectable roles are follow-up interface work.
+
+### Enable only after validation
+
+All finder options default to disabled. Enable the master switch and a raid
+individually after staging tests, using the wow-server override convention:
+
+```ini
+OptimalBotRaid.Finder.Enable = 1
+OptimalBotRaid.Finder.mc = 1
+OptimalBotRaid.Finder.bwl = 0
+```
+
+Default disabled does not establish that the raid automation is validated.
+Navigation, scripted events and combat mechanics still depend on the deployed
+Dungeon Clear and Playerbots revisions. The finder never changes difficulty,
+unbinds saves, manufactures loot eligibility or teleports with GM bypass flags.
+
+Before live enablement, test: solo and friend-party assembly, role shortages,
+progression/access failures, personal/group save conflicts, human confirmation,
+partial arrivals, manual/alt bots, a failed teleport, pause/resume, death/wipe,
+reconnect/restart, boss/loot progress and a complete run. This change has not
+been validated in the game client or a running worldserver. The small contract
+harness is not a substitute for a complete core/module build.
+
+### Regression checks
+
+With a C++17 compiler and Lua 5.1 installed:
+
+```sh
+c++ -std=c++17 -Wall -Wextra -Werror -Wno-missing-field-initializers tests/finder.cpp -o /tmp/evermore-finder-test
+/tmp/evermore-finder-test
+lua5.1 tests/model.lua
+lua5.1 tests/ui.lua
+luac5.1 -p addon/EvermoreRaidFinder/Model.lua addon/EvermoreRaidFinder/RaidFinder.lua
+```
+
+`tests/finder.cpp` executes the production command include against an in-memory
+core contract; the Lua tests execute the real protocol model and addon UI event
+handlers. CI runs these alongside the repository's shared checks.
