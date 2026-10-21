@@ -19,11 +19,11 @@ static std::vector<FinderRaid> const& FinderRaids()
     return raids;
 }
 
-static void FinderSend(Player* player, std::string const& payload)
+static void FinderSend(Player* player, uint32 request, std::string const& payload)
 {
     WorldPacket packet;
     ChatHandler::BuildChatPacket(packet, CHAT_MSG_WHISPER, LANG_ADDON,
-        player->GetGUID(), player->GetGUID(), "EMLFR\t1\t" + payload,
+        player->GetGUID(), player->GetGUID(), "EMLFR\t2\t" + std::to_string(request) + "\t" + payload,
         CHAT_TAG_NONE, player->GetName());
     player->GetSession()->SendPacket(&packet);
 }
@@ -146,30 +146,32 @@ static std::string FinderProblem(Player* player, FinderRaid const& raid, bool re
     return "";
 }
 
-static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std::string> optRaid)
+static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std::string> optRaid, Optional<uint32> optRequest = {})
 {
     Player* player = handler->GetSession()->GetPlayer();
+    uint32 const request = optRequest ? *optRequest : 0;
+    auto send = [&](std::string const& payload) { FinderSend(player, request, payload); };
     if (action == "catalog")
     {
-        FinderSend(player, "BEGIN");
+        send("BEGIN");
         for (auto const& raid : FinderRaids())
         {
             auto const* lineup = BotRaidConfigData::instance()->FindEncounter(raid.alias);
             if (!lineup || !lineup->quotas.count(40) || !FinderCatalogueProblem(player, raid).empty()) continue;
             auto const& q = lineup->quotas.at(40);
-            FinderSend(player, "RAID\t" + std::string(raid.alias) + "\t" + raid.name + "\t" +
+            send("RAID\t" + std::string(raid.alias) + "\t" + raid.name + "\t" +
                 std::to_string(raid.map) + "\t" + std::to_string(q.tanks) + "\t" +
                 std::to_string(q.healers) + "\t" + std::to_string(40 - q.tanks - q.healers) + "\t" +
                 (FinderEnabled(raid) ? "1" : "0"));
         }
-        FinderSend(player, "END");
+        send("END");
         return true;
     }
     FinderRaid const* selected = nullptr;
     for (auto const& raid : FinderRaids()) if (optRaid && *optRaid == raid.alias) selected = &raid;
     auto reply = [&](bool ok, std::string const& message)
     {
-        FinderSend(player, "RESULT\t" + action + "\t" + (selected ? selected->alias : "-") + "\t" +
+        send("RESULT\t" + action + "\t" + (selected ? selected->alias : "-") + "\t" +
             (ok ? "1" : "0") + "\t" + message);
         return true;
     };
@@ -185,7 +187,7 @@ static bool HandleFinder(ChatHandler* handler, std::string action, Optional<std:
         if (bind && bind->save)
             save = "Saved instance " + std::to_string(bind->save->GetInstanceId()) + "; resets " +
                 std::to_string(bind->save->GetResetTime()) + ".";
-        FinderSend(player, "STATUS\t" + std::string(raid.alias) + "\t" +
+        send("STATUS\t" + std::string(raid.alias) + "\t" +
             std::to_string(group ? group->GetMembersCount() : 1) + "\t" +
             std::to_string(FinderRole(player)) + "\t" + save);
         std::string problem = FinderProblem(player, raid);
