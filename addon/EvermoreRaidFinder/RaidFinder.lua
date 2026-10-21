@@ -42,6 +42,7 @@ local run = Label(frame, "", 28, -430, 690, "GameFontHighlightSmall")
 local buttons, rows = {}, {}
 local Refresh, Request
 local catalogDue = 0
+local requestId = math.floor(GetTime() * 1000) % 2147483646
 local function Button(text, x, y, width, callback)
     local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     b:SetSize(width, 26)
@@ -55,10 +56,11 @@ Request = function(action)
     if state.pending then return end
     if action ~= "catalog" and (not state.selected or state.catalogDirty) then return end
     if action == "catalog" then state.catalogDirty = true end
-    state.pending = { action = action, raid = state.selected, at = GetTime(), generation = state.catalogGeneration }
+    requestId = requestId % 2147483646 + 1
+    state.pending = { action = action, raid = state.selected, at = GetTime(), generation = state.catalogGeneration, id = requestId }
     state.notice = action == "assemble" and "Recruiting the raid..." or "Checking with the realm..."
     -- Native server commands also work while solo. Commands are consumed by the server.
-    SendChatMessage(".botraid finder " .. action .. (action ~= "catalog" and " " .. state.selected or ""), "SAY")
+    SendChatMessage(".botraid finder " .. action .. " " .. (action == "catalog" and "-" or state.selected) .. " " .. requestId, "SAY")
     Refresh()
 end
 StaticPopupDialogs.EVERMORE_LFR_ENTER = {
