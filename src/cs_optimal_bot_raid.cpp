@@ -51,6 +51,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include "Log.h"
 
 using namespace Acore::ChatCommands;
@@ -66,6 +67,8 @@ constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
 // that prune it can run on map threads, so every access takes the lock.
 static std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> s_draftedBots;
 static std::mutex s_draftedBotsLock;
+
+#include "BotRaidDraftOwnership.inc"
 
 // When each player last moved bots with .botraid assemble / dismiss. Only the commands touch
 // these, and they run on the world thread.
@@ -385,17 +388,23 @@ public:
     }
 };
 
-// Keeps s_draftedBots to bots still in a group: a bot that leaves, or a leader who leaves,
-// drops out of it, and a disband clears the whole group. Battleground and battlefield groups
-// are skipped: players sit in those next to their own group, which they still lead.
+// Keeps drafts under the current group leader, prunes departed bots and clears disbands.
+// Leadership transfers before member-removal cleanup, including when the old leader leaves.
+// Battleground and battlefield groups are skipped: they coexist with the normal group.
 class OptimalBotRaidGroupScript : public GroupScript {
 public:
-    OptimalBotRaidGroupScript() : GroupScript("OptimalBotRaidGroupScript", { GROUPHOOK_ON_REMOVE_MEMBER, GROUPHOOK_ON_DISBAND }) {}
+    OptimalBotRaidGroupScript() : GroupScript("OptimalBotRaidGroupScript", { GROUPHOOK_ON_REMOVE_MEMBER, GROUPHOOK_ON_CHANGE_LEADER, GROUPHOOK_ON_DISBAND }) {}
 
     void OnRemoveMember(Group* group, ObjectGuid guid, RemoveMethod /*method*/, ObjectGuid /*kicker*/, char const* /*reason*/) override {
         if (group->isBGGroup() || group->isBFGroup())
             return;
         Forget({ guid });
+    }
+
+    void OnChangeLeader(Group* group, ObjectGuid newLeader, ObjectGuid oldLeader) override {
+        if (group->isBGGroup() || group->isBFGroup())
+            return;
+        TransferDraftOwnership(oldLeader, newLeader);
     }
 
     void OnDisband(Group* group) override {
