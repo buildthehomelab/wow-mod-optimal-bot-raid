@@ -68,3 +68,16 @@ assert(s.pending.id == 24)
 M.Receive(s, '2\t24\tEND')
 assert(#s.order == 0 and not s.selected, 'old snapshot cannot restore an ineligible raid')
 print('PASS: timed-out ready/catalogue replies cannot impersonate a retry')
+
+-- Assembly results survive their own roster events and subsequent status polling.
+s.raids = { mc = {} }; s.selected = 'mc'; s.catalogDirty = false
+s.pending = { id = 30, action = 'assemble', raid = 'mc' }
+M.Invalidate(s)
+assert(M.Receive(s, '2\t30\tRESULT\tassemble\tmc\t0\tShort of healers') == 'assemble')
+assert(s.assemblyResult.message == 'Short of healers' and not s.assemblyResult.success)
+s.pending = { id = 31, action = 'catalog', generation = s.catalogGeneration }
+M.Receive(s, '2\t31\tBEGIN'); M.Receive(s, '2\t31\tRAID\tmc\tMolten Core\t409\t2\t3\t35\t1'); M.Receive(s, '2\t31\tEND')
+s.pending = { id = 32, action = 'status', raid = 'mc' }
+M.Receive(s, '2\t32\tRESULT\tstatus\tmc\t1\tReady')
+assert(s.notice == 'Short of healers', 'post-assembly refresh must preserve failure details')
+print('PASS: recruitment roster updates preserve the correlated assembly result and failure notice')
