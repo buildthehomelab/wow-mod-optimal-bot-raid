@@ -47,16 +47,28 @@ function M.Receive(state, message)
             state.selected = state.order[1]
             state.members, state.role, state.save = nil, nil, nil
         end
-        state.notice = #state.order == 0 and "No raids are available for your progression, level and group."
-            or "Choose a raid. Human healers and damage dealers are supported; a bot tank leads."
+        state.notice = state.assemblyResult and state.assemblyResult.message
+            or (#state.order == 0 and "No raids are available for your progression, level and group."
+            or "Choose a raid. Human healers and damage dealers are supported; a bot tank leads.")
         return "catalog"
     elseif kind == "STATUS" and p[3] == state.selected then
         state.members, state.role, state.save = tonumber(p[4]), tonumber(p[5]), p[6]
     elseif kind == "RESULT" and state.pending and p[3] == state.pending.action and
         p[4] == state.pending.raid and p[4] == state.selected then
         state.pending = nil
+        if p[3] == "assemble" then
+            -- Assembly itself changes the roster. Preserve its exact reply, then
+            -- revalidate the resulting group before offering outdoor travel.
+            state.assemblyResult = { raid = p[4], success = p[5] == "1", message = p[6] or "No details returned." }
+            state.notice = state.assemblyResult.message
+            M.Invalidate(state)
+            return "assemble"
+        end
         if state.catalogDirty then return "stale_action" end
         state.notice = p[6] or "No details returned."
+        if p[3] == "status" and state.assemblyResult then
+            state.notice = state.assemblyResult.message .. (p[5] == "1" and "" or ("\n" .. state.notice))
+        end
         if p[5] == "1" then return p[3] end
         return "error"
     end
