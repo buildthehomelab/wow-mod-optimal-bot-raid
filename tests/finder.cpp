@@ -1,6 +1,8 @@
 // Contract harness: compile and execute the production command implementation
 // against a small in-memory core, including entry refusals and roster mutations.
 #include <cassert>
+#include <cmath>
+#include <type_traits>
 #include <cstdint>
 #include <ctime>
 #include <iostream>
@@ -24,6 +26,7 @@ struct Group;
 struct Player {
     uint32 id, map = 0, instance = 0, level = 60, cls = 1, stage = 1;
     bool alive = true, combat = false, moving = false, world = true, bot = false, random = false, access = true, teleport = true, excluded = false;
+    float x = 0, y = 0, z = 0, facing = 0;
     BotRole role = ROLE_RANGED;
     Group* group = nullptr;
     Session session; Map location;
@@ -45,11 +48,12 @@ struct Player {
     Group* GetGroup() const { return group; }
     Session* GetSession() { return &session; }
     bool Satisfy(void const*, uint32, bool) const { return access; }
-    float GetPositionX() const { return 1; } float GetPositionY() const { return 2; }
-    float GetPositionZ() const { return 3; } float GetOrientation() const { return 0; }
-    bool TeleportTo(uint32 target, float, float, float, float, int = 0, Player* owner = nullptr) {
+    float GetPositionX() const { return x; } float GetPositionY() const { return y; }
+    float GetPositionZ() const { return z; } float GetOrientation() const { return facing; }
+    bool TeleportTo(uint32 target, float tx, float ty, float tz, float tf, int = 0, Player* owner = nullptr) {
         if (!teleport) return false;
-        map = target; instance = owner ? owner->instance : 10; return true;
+        map = target; instance = (target == 409 || target == 469) ? (owner ? owner->instance : 10) : 0;
+        x = tx; y = ty; z = tz; facing = tf; return true;
     }
 };
 struct GroupReference {
@@ -81,11 +85,21 @@ struct Saves {
     Bind* PlayerGetBoundInstance(ObjectGuid id, uint32, int) { auto it = binds.find(id); return it == binds.end() ? nullptr : &it->second; }
 } saves;
 auto* sInstanceSaveMgr = &saves;
-struct AreaTriggerTeleport { uint32 target_mapId = 409; float target_X = 0, target_Y = 0, target_Z = 0, target_Orientation = 0; };
+constexpr uint32 GAMEOBJECT_TYPE_MEETINGSTONE = 23;
+struct GameObjectData { uint32 id = 179584, mapid = 0; float posX = -7590.69f, posY = -1139.77f, posZ = 260.681f, orientation = -2.76635f; };
+struct GameObjectTemplate { uint32 type = GAMEOBJECT_TYPE_MEETINGSTONE; };
+struct MapEntry { bool instance = false; bool Instanceable() const { return instance; } };
+struct MapStore {
+    MapEntry world{false}, raid{true};
+    MapEntry const* LookupEntry(uint32 id) { return id == 0 ? &world : (id == 409 ? &raid : nullptr); }
+} sMapStore;
 struct Objects {
-    AreaTriggerTeleport entrance;
+    bool missing = false;
+    GameObjectData stone;
+    GameObjectTemplate object;
     void const* GetAccessRequirement(uint32, int) { return nullptr; }
-    AreaTriggerTeleport const* GetMapEntranceTrigger(uint32 map) { entrance.target_mapId = map; return &entrance; }
+    GameObjectData const* GetGameObjectData(uint32 spawn) { return !missing && (spawn == 427 || spawn == 428) ? &stone : nullptr; }
+    GameObjectTemplate const* GetGameObjectTemplate(uint32) { return &object; }
 } objects;
 auto* sObjectMgr = &objects;
 struct Maps {
@@ -93,7 +107,7 @@ struct Maps {
     bool PlayerCannotEnter(uint32 map, Player* p) { ++calls; return !p->group || !p->group->raid || p->map == map || !p->access; }
 } maps;
 auto* sMapMgr = &maps;
-struct Config { bool enabled = true; template<class T> T GetOption(std::string const&, T) { return enabled; } } config;
+struct Config { bool enabled = true; template<class T> T GetOption(std::string const&, T fallback) { if constexpr (std::is_same_v<T, bool>) return enabled; return fallback; } } config;
 auto* sConfigMgr = &config;
 struct PlayerbotsMgr {
     static PlayerbotsMgr& instance() { static PlayerbotsMgr m; return m; }
@@ -171,7 +185,7 @@ int main() {
     leader.stage = 0;
     assert(catalogue().find("RAID\tmc\t") != std::string::npos);
     assert(catalogue().find("RAID\tbwl\t") == std::string::npos);
-    for (auto const& action : {"assemble", "enter", "rally", "ready"}) {
+    for (auto const& action : {"assemble", "summon", "rally", "ready"}) {
         Commands::HandleFinder(&handler, action, std::string("bwl"));
         assert(leader.session.last.find("complete Molten Core") != std::string::npos);
     }
@@ -216,23 +230,33 @@ int main() {
     }
     assert(Commands::FinderProblem(&leader, raid).empty());
     assert(!Commands::FinderProblem(&leader, raid, true).empty()); // not arrived
-    // A friend cannot create a separate unsaved copy before the leader arrives.
+    // Validate destination type/map before offering or summoning anyone.
+    objects.missing = true; assert(catalogue().find("RAID\t") == std::string::npos); objects.missing = false;
+    objects.object.type = 0; assert(catalogue().find("RAID\t") == std::string::npos); objects.object.type = GAMEOBJECT_TYPE_MEETINGSTONE;
+    objects.stone.mapid = 409; assert(catalogue().find("RAID\t") == std::string::npos); objects.stone.mapid = 0;
     bots.back().bot = bots.back().random = false;
     s_draftedBots[1].erase(40);
     ChatHandler friendHandler{&bots.back()};
-    Commands::HandleFinder(&friendHandler, "enter", std::string("mc"));
-    assert(bots.back().map == 0 && bots.back().session.last.find("leader must enter first") != std::string::npos);
-    Commands::HandleFinder(&handler, "enter", std::string("mc"));
-    assert(leader.map == 409 && leader.instance == 10);
-    Commands::HandleFinder(&friendHandler, "enter", std::string("mc"));
-    assert(bots.back().map == 409 && bots.back().instance == leader.instance);
-    bots.back().instance = 999;
-    Commands::HandleFinder(&friendHandler, "enter", std::string("mc"));
-    assert(bots.back().session.last.find("another copy") != std::string::npos);
-    bots.back().instance = leader.instance;
+    Commands::HandleFinder(&friendHandler, "summon", std::string("mc"));
+    assert(Commands::FinderAtStone(&bots.back(), objects.stone)); // humans may gather in any order outdoors
+    assert(!Commands::FinderAtStone(&leader, objects.stone)); // a friend's confirmation never moves another human
+    Commands::HandleFinder(&handler, "summon", std::string("mc"));
+    assert(Commands::FinderAtStone(&leader, objects.stone));
+    for (auto& bot : bots) assert(Commands::FinderAtStone(&bot, objects.stone));
+    assert(leader.map == 0 && leader.instance == 0); // no direct raid entry
+    assert(!Commands::FinderProblem(&leader, raid, true).empty()); // Start Run still requires real entry
     Commands::HandleFinder(&handler, "rally", std::string("mc"));
     assert(leader.session.last.find("RESULT\trally\tmc\t1") != std::string::npos);
-    assert(Commands::FinderProblem(&leader, raid, true).empty()); // already-in-map is not entry
+    // Simulate normal portal travel; the finder itself never sends this teleport.
+    leader.map = 409; leader.instance = 10;
+    for (auto& bot : bots) { bot.map = 409; bot.instance = 10; }
+    assert(Commands::FinderProblem(&leader, raid, true).empty());
+    int const beforeInsideRecruit = Commands::assembleCalls;
+    Commands::HandleFinder(&handler, "assemble", std::string("mc"));
+    assert(Commands::assembleCalls == beforeInsideRecruit && leader.session.last.find("Leave the instance") != std::string::npos);
+    bots.back().instance = 999;
+    assert(!Commands::FinderProblem(&leader, raid, true).empty());
+    bots.back().instance = 10;
     bots[0].combat = true;
     assert(!Commands::FinderProblem(&leader, raid, true).empty()); bots[0].combat = false;
     bots[0].world = false;
@@ -250,12 +274,20 @@ int main() {
     ChatHandler follower{&bots.back()};
     Commands::HandleFinder(&follower, "assemble", std::string("mc"));
     assert(bots.back().session.last.find("Only the raid leader") != std::string::npos);
-    bots[0].map = bots[0].instance = 0; s_draftedBots[1].erase(2);
+    Commands::FinderTravelToStone(&leader, objects.stone);
+    for (auto& bot : bots) Commands::FinderTravelToStone(&bot, objects.stone);
+    bots[0].x = 0; bots[0].y = 0; bots[0].z = 0;
+    s_draftedBots[1].erase(2);
     Commands::HandleFinder(&handler, "rally", std::string("mc"));
-    assert(bots[0].map == 0); // never teleport a manually invited bot
+    assert(!Commands::FinderAtStone(&bots[0], objects.stone)); // never teleport a manually invited bot
+    // A player alt is not moved even if a stale ownership entry remains.
+    bots[1].random = false; bots[1].x = bots[1].y = bots[1].z = 0;
+    Commands::HandleFinder(&handler, "rally", std::string("mc"));
+    assert(!Commands::FinderAtStone(&bots[1], objects.stone));
+    bots[1].random = true; Commands::FinderTravelToStone(&bots[1], objects.stone);
     s_draftedBots[1].insert(2); bots[0].teleport = false;
     Commands::HandleFinder(&handler, "rally", std::string("mc"));
-    assert(leader.session.last.find("could not enter") != std::string::npos);
+    assert(leader.session.last.find("could not be summoned") != std::string::npos);
     // Transfer the actual production ownership ledger to a new leader; rally
     // must use that ledger even after the former owner's entry is forgotten.
     TransferDraftOwnership(1, 40);
@@ -263,10 +295,10 @@ int main() {
     assert(!s_draftedBots.count(1) && s_draftedBots[40].count(2));
     bots[0].teleport = true;
     Commands::HandleFinder(&friendHandler, "rally", std::string("mc"));
-    assert(bots[0].map == 409 && bots[0].instance == bots.back().instance);
+    assert(Commands::FinderAtStone(&bots[0], objects.stone));
     TransferDraftOwnership(40, 1); group.leader = 1;
-    leader.map = leader.instance = 0; leader.teleport = false;
-    Commands::HandleFinder(&handler, "enter", std::string("mc"));
-    assert(leader.map == 0 && leader.session.last.find("Entry refused") != std::string::npos);
-    std::cout << "PASS: disabled, solo preflight, arrival, rally, combat, offline, role shortage, bears, saves, leadership, ownership, teleport refusal\n";
+    leader.map = leader.instance = 0; leader.x = leader.y = leader.z = 0; leader.teleport = false;
+    Commands::HandleFinder(&handler, "summon", std::string("mc"));
+    assert(leader.map == 0 && leader.session.last.find("Summon refused") != std::string::npos);
+    std::cout << "PASS: progression, exterior stone validation, human consent, full bot gathering, no instance teleport, portal readiness, roles, saves, ownership, refusal\n";
 }
