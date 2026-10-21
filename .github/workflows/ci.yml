@@ -21,3 +21,23 @@ jobs:
 #   with:
 #     module: mod-foo          # only if the server folder isn't the repo name minus "wow-"
 #     lua-exclude: "Astrolabe/**"
+
+  raid-finder:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1
+      - name: Server command contract
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -Wno-missing-field-initializers tests/finder.cpp -o /tmp/evermore-finder-test
+          /tmp/evermore-finder-test
+          c++ -std=c++17 -Wall -Wextra -Werror -Wno-missing-field-initializers -DEVERMORE_LFR_IP tests/finder.cpp -o /tmp/evermore-finder-ip-test
+          /tmp/evermore-finder-ip-test
+      - name: Client protocol and UI interactions
+        run: |
+          lua5.1 tests/model.lua
+          lua5.1 tests/ui.lua
+          luac5.1 -p addon/EvermoreRaidFinder/Model.lua addon/EvermoreRaidFinder/RaidFinder.lua
