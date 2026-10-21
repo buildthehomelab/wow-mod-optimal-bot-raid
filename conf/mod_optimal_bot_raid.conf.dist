@@ -506,3 +506,11 @@ OptimalBotRaid.AI.Warrior.2 = 1.2
 OptimalBotRaid.Finder.Enable = 0
 OptimalBotRaid.Finder.mc = 0
 OptimalBotRaid.Finder.bwl = 0
+
+# Loaded gameobject spawn GUIDs (not template entries). The defaults are the
+# stock exterior Blackrock stones: BRD approach for MC, Spire approach for BWL.
+# Custom realms can choose a different real meeting-stone spawn. Missing spawns,
+# non-stones and instance-interior destinations are rejected; there is no fallback
+# to an instance teleport. Verify landing/traversal before enabling a raid.
+OptimalBotRaid.Finder.mc.MeetingStoneSpawn = 427
+OptimalBotRaid.Finder.bwl.MeetingStoneSpawn = 428
