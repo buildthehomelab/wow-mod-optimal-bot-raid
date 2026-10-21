@@ -500,3 +500,17 @@ OptimalBotRaid.AI.Rogue.2 = 0.8
 OptimalBotRaid.AI.Warrior.0 = 1.0
 OptimalBotRaid.AI.Warrior.1 = 1.0
 OptimalBotRaid.AI.Warrior.2 = 1.2
+# Evermore Raid Finder pilot. Enable each raid only after end-to-end validation.
+# This adds a menu/entry flow for existing Normal raids, not a new difficulty.
+# Install addon/EvermoreRaidFinder in Interface/AddOns; open it with /lfr.
+OptimalBotRaid.Finder.Enable = 0
+OptimalBotRaid.Finder.mc = 0
+OptimalBotRaid.Finder.bwl = 0
+
+# Loaded gameobject spawn GUIDs (not template entries). The defaults are the
+# stock exterior Blackrock stones: BRD approach for MC, Spire approach for BWL.
+# Custom realms can choose a different real meeting-stone spawn. Missing spawns,
+# non-stones and instance-interior destinations are rejected; there is no fallback
+# to an instance teleport. Verify landing/traversal before enabling a raid.
+OptimalBotRaid.Finder.mc.MeetingStoneSpawn = 427
+OptimalBotRaid.Finder.bwl.MeetingStoneSpawn = 428
