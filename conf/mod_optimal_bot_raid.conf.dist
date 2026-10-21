@@ -500,3 +500,9 @@ OptimalBotRaid.AI.Rogue.2 = 0.8
 OptimalBotRaid.AI.Warrior.0 = 1.0
 OptimalBotRaid.AI.Warrior.1 = 1.0
 OptimalBotRaid.AI.Warrior.2 = 1.2
+# Evermore Raid Finder pilot. Enable each raid only after end-to-end validation.
+# This adds a menu/entry flow for existing Normal raids, not a new difficulty.
+# Install addon/EvermoreRaidFinder in Interface/AddOns; open it with /lfr.
+OptimalBotRaid.Finder.Enable = 0
+OptimalBotRaid.Finder.mc = 0
+OptimalBotRaid.Finder.bwl = 0
