@@ -9,7 +9,11 @@ function M.Split(text)
     return parts
 end
 function M.New()
-    return { raids = {}, order = {}, notice = "Connecting to the realm..." }
+    return { raids = {}, order = {}, catalogDirty = true, catalogGeneration = 0, notice = "Connecting to the realm..." }
+end
+function M.Invalidate(state)
+    state.catalogGeneration = state.catalogGeneration + 1
+    state.catalogDirty = true
 end
 function M.Receive(state, message)
     local p = M.Split(message)
@@ -24,17 +28,32 @@ function M.Receive(state, message)
         state.staging[p[3]] = { alias = p[3], name = p[4], map = map,
             tanks = tanks, healers = healers, damage = damage, enabled = p[9] == "1" }
     elseif kind == "END" and state.staging then
+        local request = state.pending
+        if not request or request.action ~= "catalog" then
+            state.staging, state.stagingOrder = nil, nil
+            return
+        end
+        state.pending = nil
+        if (request.generation or 0) ~= state.catalogGeneration then
+            state.staging, state.stagingOrder = nil, nil
+            return "stale_catalog"
+        end
         state.raids, state.order = state.staging, state.stagingOrder
         state.staging, state.stagingOrder = nil, nil
-        if not state.raids[state.selected] then state.selected = state.order[1] end
-        if state.pending and state.pending.action == "catalog" then state.pending = nil end
-        state.notice = "Choose a raid. Human healers and damage dealers are supported; a bot tank leads."
+        state.catalogDirty = false
+        if not state.raids[state.selected] then
+            state.selected = state.order[1]
+            state.members, state.role, state.save = nil, nil, nil
+        end
+        state.notice = #state.order == 0 and "No raids are available for your progression, level and group."
+            or "Choose a raid. Human healers and damage dealers are supported; a bot tank leads."
         return "catalog"
     elseif kind == "STATUS" and p[3] == state.selected then
         state.members, state.role, state.save = tonumber(p[4]), tonumber(p[5]), p[6]
     elseif kind == "RESULT" and state.pending and p[3] == state.pending.action and
         p[4] == state.pending.raid and p[4] == state.selected then
         state.pending = nil
+        if state.catalogDirty then return "stale_action" end
         state.notice = p[6] or "No details returned."
         if p[5] == "1" then return p[3] end
         return "error"
