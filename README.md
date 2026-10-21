@@ -323,126 +323,13 @@ For developers and contributors, this module hooks into the following core syste
 ## 📄 License
 This project is licensed under the GNU AGPL v3.0 - see the LICENSE file for details.
 
-## Evermore Raid Finder pilot
+## For other modules
 
-The bundled **EvermoreRaidFinder** addon adds a retail-inspired raid selection
-window for 3.3.5a. Copy `addon/EvermoreRaidFinder` into `Interface/AddOns`, then
-open `/lfr` or `/raidfinder`. Install the matching server module revision and
-Dungeon Clear; the DungeonClear and Journal companion addons are recommended.
-The module and addon ship together so their protocol versions stay aligned.
-Raid Finder requires Individual Progression to be compiled in and enabled; it
-offers no raids when that eligibility source is unavailable.
+`src/OptimalBotRaidApi.h` lets another server module use the assembler without copying it:
+look up a raid's tank and healer slots, read a member's raid role the way `.botraid assemble`
+sees it, run an assemble for a player, and list the bots drafted for a leader. AzerothCore
+puts every module's source folders on the include path, so `#include "OptimalBotRaidApi.h"`
+works from any module installed next to this one.
 
-This first pilot covers **full Normal Molten Core and Blackwing Lair** runs.
-There is no separate LFR difficulty, new loot table, wing skipping or simulated
-queue. Roles are inferred from the active specialization using the assembler's
-existing classifier. Human healers and damage dealers can lead preparation;
-a bot tank leads navigation. Human tank selection is deferred.
-
-The flow is:
-
-1. Select a raid and refresh its requirements. The server supplies the enabled
-   catalogue, configured composition, roster count, inferred role and personal
-   instance save/reset. The catalogue only includes enabled raids unlocked by
-   the character's Individual Progression stage, level and access requirements.
-   Molten Core is the starting raid; Blackwing Lair only appears after Molten
-   Core progression is complete. Previously unlocked raids remain available.
-   Every current group member must meet the same access rules, respecting IP's
-   configured random-bot/account exclusions. A lower-stage human or player alt
-   blocks later content; an offline member's eligibility is not assumed.
-   The same checks run again before assembly, summoning, gathering and readiness, so
-   manually issuing commands or using an old menu cannot skip progression.
-2. The group leader clicks **Find Raid**. Existing humans/bots count toward the
-   lineup; `.botraid` fills the remaining slots. A full roster with insufficient
-   tanks/healers is reported as a failure. A failed or partial draft can leave
-   recruited bots grouped: **Dismiss Bots** releases only this leader's drafts,
-   subject to the existing dismiss cooldown.
-3. Recruitment's roster updates are reconciled before offering travel: the
-   assembly reply is retained while the updated group is revalidated. Failure
-   details remain visible rather than disappearing during that refresh.
-4. Confirm **Summon to Stone** to travel to the exterior meeting stone. The
-   leader's confirmation also summons all tracked random-bot drafts to that
-   stone. Other humans each confirm their own travel; the leader never teleports
-   them. Manually invited bots/player alts keep their existing travel controls.
-   There is no direct LFR teleport into the instance, and LFR recruitment itself
-   requires the leader to be outside instances. **Gather Bots** retries owned
-   bot travel while the leader stands at the stone.
-5. Enter through the normal entrance, preferably with the leader first to
-   establish the shared instance. Bot following/portal behavior remains provided
-   by Playerbots and needs staging validation. **Start Run** rechecks all 40
-   members, their roles, access, combat state and exact instance before asking
-   Dungeon Clear to start. It will not start while the group is still outside.
-   The footer displays DC's reported state/objective. **Pause / Resume** and
-   **Stop Run** use its existing commands. Stopping does not clear saves or leave
-   the raid; exit and leave the human group through the normal game controls.
-
-Existing saves are preserved; conflicting permanent saves block preparation.
-The displayed save is the player's own save, not a promise of a fresh instance
-or loot eligibility. Draft ownership transfers with raid leadership. Tracking
-does not survive a worldserver restart; ownership is never reconstructed from
-arbitrary group membership.
-
-Quest/progression, level, group-roster and world-entry updates invalidate the
-visible offers and automatically refresh the catalogue. Refresh also reloads
-eligibility, including when the list is empty. Protocol v2 carries a unique request
-ID in commands and every reply frame, including catalogue boundaries, so delayed
-packets cannot impersonate a retry after timeout. Old catalogue/readiness responses
-cannot restore a raid or start a run after an invalidation. No eligible entries
-produces an empty menu with its launch buttons disabled, rather than locked
-later-stage raids offered in the list.
-
-The window has **Bosses & Loot** to open Journal's Raids section. It does not
-assume Journal's instance IDs equal map IDs. Full encounter lists, direct raid
-links and selectable roles are follow-up interface work.
-
-### Enable only after validation
-
-All finder options default to disabled. Enable the master switch and a raid
-individually after staging tests, using the wow-server override convention:
-
-```ini
-OptimalBotRaid.Finder.Enable = 1
-OptimalBotRaid.Finder.mc = 1
-OptimalBotRaid.Finder.bwl = 0
-OptimalBotRaid.Finder.mc.MeetingStoneSpawn = 427
-OptimalBotRaid.Finder.bwl.MeetingStoneSpawn = 428
-```
-
-The meeting-stone settings are **gameobject spawn GUIDs**, not template entries.
-Defaults come from the verified core world data: spawn 427 / template 179584 is
-Blackrock Depths' exterior stone (used for the MC approach), and spawn 428 /
-template 179585 is the Spire exterior stone (used for BWL). Both are on world
-map 0. These are existing Blackrock stones, not new raid-specific objects.
-Coordinates are read from the realm's loaded spawn cache, with a small landing
-offset beside the object. Custom realms can select another real stone spawn.
-Missing stones, wrong object types and instance-interior destinations are
-rejected; the finder never falls back to teleporting into the raid. Verify the
-landing space and walk to each entrance against the realm's terrain/client patches.
-
-Default disabled does not establish that the raid automation is validated.
-Navigation, scripted events and combat mechanics still depend on the deployed
-Dungeon Clear and Playerbots revisions. The finder never changes difficulty,
-unbinds saves, manufactures loot eligibility or teleports with GM bypass flags.
-
-Before live enablement, test: solo and friend-party assembly, role shortages,
-progression/access failures, personal/group save conflicts, human confirmation, stone landing/walk-to-entrance,
-partial arrivals, manual/alt bots, a failed teleport, pause/resume, death/wipe,
-reconnect/restart, boss/loot progress and a complete run. This change has not
-been validated in the game client or a running worldserver. The small contract
-harness is not a substitute for a complete core/module build.
-
-### Regression checks
-
-With a C++17 compiler and Lua 5.1 installed:
-
-```sh
-c++ -std=c++17 -Wall -Wextra -Werror -Wno-missing-field-initializers tests/finder.cpp -o /tmp/evermore-finder-test
-/tmp/evermore-finder-test
-lua5.1 tests/model.lua
-lua5.1 tests/ui.lua
-luac5.1 -p addon/EvermoreRaidFinder/Model.lua addon/EvermoreRaidFinder/RaidFinder.lua
-```
-
-`tests/finder.cpp` executes the production command include against an in-memory
-core contract; the Lua tests execute the real protocol model and addon UI event
-handlers. CI runs these alongside the repository's shared checks.
+[mod-raid-finder](https://github.com/buildthehomelab/wow-mod-raid-finder) uses it for a
+Raid Finder window that assembles a bot raid and gathers it at the raid's meeting stone.

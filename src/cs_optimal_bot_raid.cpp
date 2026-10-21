@@ -28,13 +28,7 @@
 #include "InstanceSaveMgr.h"
 #include "World.h"
 #include "GameTime.h"
-#include "ObjectMgr.h"
-#include "MapMgr.h"
-#include "WorldPacket.h"
-#if __has_include("IndividualProgression.h")
-#include "IndividualProgression.h"
-#define EVERMORE_LFR_IP 1
-#endif
+#include "OptimalBotRaidApi.h"
 #include <vector>
 #include <string>
 #include <cmath>
@@ -463,7 +457,6 @@ public:
 
     ChatCommandTable GetCommands() const override {
         static ChatCommandTable botRaidTable = {
-            { "finder",    HandleFinder,     SEC_PLAYER, Console::No },
             { "assemble",  HandleAssemble,   SEC_PLAYER, Console::No },
             { "dismiss",   HandleDismiss,    SEC_PLAYER, Console::No },
             { "debug",     HandleDebug,      SEC_GAMEMASTER, Console::No },
@@ -476,8 +469,6 @@ public:
         static ChatCommandTable commandTable = { { "botraid", botRaidTable } };
         return commandTable;
     }
-
-    #include "RaidFinderCommands.inc"
 
     // Lists the raid lineups and what to type for each.
     static bool HandleRaids(ChatHandler* handler)
@@ -1718,6 +1709,54 @@ public:
         return true;
     }
 };
+
+// OptimalBotRaidApi.h: the parts of the assembler other modules may use.
+namespace OptimalBotRaid
+{
+    bool GetLineup(std::string const& raid, uint32 size, Lineup& lineup)
+    {
+        auto const* encounter = BotRaidConfigData::instance()->FindEncounter(raid);
+        if (!encounter)
+            return false;
+        auto it = encounter->quotas.find(size);
+        if (it == encounter->quotas.end())
+            return false;
+        lineup.tanks = uint32(it->second.tanks);
+        lineup.healers = uint32(it->second.healers);
+        return true;
+    }
+
+    Role GetRaidRole(Player* member)
+    {
+        BotRole role; float competence; uint32 buffs;
+        cs_optimal_bot_raid::MapBotProfile(member, cs_optimal_bot_raid::GetBotSpec(member, member->getClass()), role, competence, buffs);
+        // Like assemble: a bear bot doesn't fill a raid tank slot unless bears are allowed.
+        if (role == ROLE_TANK && member->getClass() == CLASS_DRUID &&
+            PlayerbotsMgr::instance().GetPlayerbotAI(member) && !BotRaidConfigData::instance()->bearTanksInRaids)
+            role = ROLE_MELEE;
+        return static_cast<Role>(role);
+    }
+
+    bool Assemble(ChatHandler* handler, std::string const& raid, uint32 size, uint32 minLevel, uint32 maxLevel)
+    {
+        auto const* encounter = BotRaidConfigData::instance()->FindEncounter(raid);
+        if (!encounter || !encounter->quotas.count(size))
+            return false;
+        cs_optimal_bot_raid::ExecuteAssemble(handler, minLevel, maxLevel, true, size, encounter);
+        return true;
+    }
+
+    std::unordered_set<ObjectGuid> DraftedBots(ObjectGuid leader)
+    {
+        std::lock_guard<std::mutex> lock(s_draftedBotsLock);
+        auto it = s_draftedBots.find(leader);
+        return it == s_draftedBots.end() ? std::unordered_set<ObjectGuid>{} : it->second;
+    }
+}
+
+static_assert(uint8(OptimalBotRaid::Role::Tank) == ROLE_TANK && uint8(OptimalBotRaid::Role::Healer) == ROLE_HEALER &&
+    uint8(OptimalBotRaid::Role::Melee) == ROLE_MELEE && uint8(OptimalBotRaid::Role::Ranged) == ROLE_RANGED &&
+    uint8(OptimalBotRaid::Role::Unknown) == ROLE_UNKNOWN, "OptimalBotRaid::Role must match BotRole");
 
 void Addcs_optimal_bot_raidScripts() {
     new cs_optimal_bot_raid();
