@@ -1,0 +1,28 @@
+dofile('addon/EvermoreRaidFinder/Model.lua')
+local M = EvermoreRaidFinderModel
+local s = M.New()
+s.pending = { action = 'catalog' }
+M.Receive(s, '1\tBEGIN')
+M.Receive(s, '1\tRAID\tmc\tMolten Core\t409\t4\t10\t26\t1')
+assert(not s.raids.mc, 'catalogue must commit atomically')
+assert(M.Receive(s, '1\tEND') == 'catalog')
+assert(s.selected == 'mc' and s.raids.mc.damage == 26 and not s.pending)
+s.pending = { action = 'ready', raid = 'mc' }
+assert(not M.Receive(s, '2\tRESULT\tready\tmc\t1\tReady'), 'ignore incompatible protocol')
+assert(not M.Receive(s, '1\tRESULT\tready\tbwl\t1\tReady'), 'ignore another raid')
+assert(not M.Receive(s, '1\tRESULT\tassemble\tmc\t1\tReady'), 'ignore another action')
+assert(M.Receive(s, '1\tRESULT\tready\tmc\t0\tNot ready') == 'error')
+assert(not s.pending and s.notice == 'Not ready')
+assert(not M.Receive(s, '1\tRESULT\tready\tmc\t1\tReady'), 'unsolicited reply cannot start a run')
+s.pending = { action = 'ready', raid = 'mc' }
+assert(M.Receive(s, '1\tRESULT\tready\tmc\t1\tReady') == 'ready')
+assert(not M.Receive(s, '1\tRESULT\tready\tmc\t1\tReady'), 'replayed success cannot start again')
+M.Receive(s, '1\tSTATUS\tbwl\t40\t1\tSaved')
+assert(not s.members, 'other raids cannot overwrite status')
+M.Receive(s, '1\tSTATUS\tmc\t40\t1\tSaved')
+assert(s.members == 40 and s.role == 1 and s.save == 'Saved')
+M.Receive(s, '1\tBEGIN')
+M.Receive(s, '1\tRAID\tbad;command\tBad\t409\t4\t10\t26\t1')
+M.Receive(s, '1\tEND')
+assert(#s.order == 0 and not s.selected, 'bad catalogue cannot inject commands')
+print('PASS: catalogue, protocol version, selection, failure, unsolicited/replayed results, status, malformed entries')
