@@ -375,7 +375,9 @@ The flow is:
 
 Quest/progression, level, group-roster and world-entry updates invalidate the
 visible offers and automatically refresh the catalogue. Refresh also reloads
-eligibility, including when the list is empty. Old catalogue/readiness responses
+eligibility, including when the list is empty. Protocol v2 carries a unique request
+ID in commands and every reply frame, including catalogue boundaries, so delayed
+packets cannot impersonate a retry after timeout. Old catalogue/readiness responses
 cannot restore a raid or start a run after an invalidation. No eligible entries
 produces an empty menu with its launch buttons disabled, rather than locked
 later-stage raids offered in the list.
