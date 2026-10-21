@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Evermore Raid Finder
+## Notes: Assemble and enter bot-led Evermore raids.
+## Author: Project Evermore
+## Version: 0.1.0
+## OptionalDeps: DragonUI, DungeonClear, Journal
+Model.lua
+RaidFinder.lua
