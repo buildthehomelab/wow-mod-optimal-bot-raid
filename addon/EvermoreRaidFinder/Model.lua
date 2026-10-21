@@ -17,29 +17,31 @@ function M.Invalidate(state)
 end
 function M.Receive(state, message)
     local p = M.Split(message)
-    if p[1] ~= "1" then return end
+    if p[1] ~= "2" or not state.pending or p[2] ~= tostring(state.pending.id) then return end
+    -- Every frame, including BEGIN/END, belongs to one specific server request.
+    table.remove(p, 2)
     local kind = p[2]
     if kind == "BEGIN" then
-        state.staging, state.stagingOrder = {}, {}
-    elseif kind == "RAID" and state.staging then
+        state.staging, state.stagingOrder, state.stagingId = {}, {}, state.pending.id
+    elseif kind == "RAID" and state.staging and state.stagingId == state.pending.id then
         local map, tanks, healers, damage = tonumber(p[5]), tonumber(p[6]), tonumber(p[7]), tonumber(p[8])
         if not p[3] or not string.match(p[3], "^[a-z]+$") or not map or not tanks or not healers or not damage then return end
         if not state.staging[p[3]] then state.stagingOrder[#state.stagingOrder + 1] = p[3] end
         state.staging[p[3]] = { alias = p[3], name = p[4], map = map,
             tanks = tanks, healers = healers, damage = damage, enabled = p[9] == "1" }
-    elseif kind == "END" and state.staging then
+    elseif kind == "END" and state.staging and state.stagingId == state.pending.id then
         local request = state.pending
         if not request or request.action ~= "catalog" then
-            state.staging, state.stagingOrder = nil, nil
+            state.staging, state.stagingOrder, state.stagingId = nil, nil, nil
             return
         end
         state.pending = nil
         if (request.generation or 0) ~= state.catalogGeneration then
-            state.staging, state.stagingOrder = nil, nil
+            state.staging, state.stagingOrder, state.stagingId = nil, nil, nil
             return "stale_catalog"
         end
         state.raids, state.order = state.staging, state.stagingOrder
-        state.staging, state.stagingOrder = nil, nil
+        state.staging, state.stagingOrder, state.stagingId = nil, nil, nil
         state.catalogDirty = false
         if not state.raids[state.selected] then
             state.selected = state.order[1]
